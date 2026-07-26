@@ -417,6 +417,7 @@
     <script src="dashboard/static/js/insert-figure-overlay.js"></script>
     <script src="dashboard/static/js/insert-file-overlay.js"></script>
     <script src="dashboard/static/js/chat.js"></script>
+    <script src="dashboard/static/js/template_designer.js"></script>
 </head>
 <body class="bg-app-bg text-app-text font-sans selection:bg-app-accent selection:text-white">
 
@@ -554,6 +555,41 @@
                         <option value="numeric">Numeric — [1]</option>
                     </select>
                     <p class="text-[11px] text-app-text opacity-70 leading-snug">Applied on the next Compile / Export. Author–date is Quarto's default; Numeric uses bracketed&nbsp;[1] references with a numbered list.</p>
+                </div>
+
+                <!-- ── HTML Export Template ─────────────────────────────── -->
+                <div class="space-y-2 pt-3 mt-3 border-t border-app-border">
+                    <label class="block text-xs text-app-text font-medium">HTML export template</label>
+                    <p class="text-[11px] text-app-text opacity-70 leading-snug">Applied automatically when you click <strong>Export to HTML</strong>.</p>
+
+                    <!-- Preset buttons -->
+                    <div id="template-preset-btns" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px;">
+                        <!-- Populated by template_designer.js -->
+                    </div>
+
+                    <!-- Figure index toggle -->
+                    <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+                        <label class="flex-1 text-[11px] text-app-text" for="templateAddIndex">Add list of figures</label>
+                        <label style="position:relative;display:inline-flex;align-items:center;cursor:pointer;">
+                            <input type="checkbox" id="templateAddIndex" style="opacity:0;width:0;height:0;position:absolute;">
+                            <span id="templateAddIndexTrack" style="width:32px;height:17px;background:#2A3047;border-radius:9px;display:flex;align-items:center;padding:2px;transition:background 0.2s;">
+                                <span id="templateAddIndexThumb" style="width:13px;height:13px;border-radius:7px;background:#fff;transition:transform 0.2s;"></span>
+                            </span>
+                        </label>
+                    </div>
+                    <p class="text-[11px] text-app-text opacity-60 leading-snug" style="margin-top:2px;">Scans all figure captions and injects a numbered table at the top of the exported HTML.</p>
+
+                    <!-- Custom CSS textarea (shown only when 'Custom' preset active) -->
+                    <div id="templateCustomCSSWrap" style="display:none;margin-top:6px;">
+                        <label class="block text-[11px] text-app-text font-medium mb-1" for="templateCustomCSS">Custom CSS overrides</label>
+                        <textarea id="templateCustomCSS"
+                            placeholder="/* e.g. body { max-width: 900px; } */"
+                            spellcheck="false"
+                            style="width:100%;height:110px;background:#0D1117;border:1px solid #2A3047;border-radius:4px;
+                                   color:#C3E88D;font-family:'JetBrains Mono',monospace;font-size:10px;
+                                   line-height:1.5;padding:7px;resize:vertical;box-sizing:border-box;outline:none;"
+                        ></textarea>
+                    </div>
                 </div>
             </div>
 
@@ -709,6 +745,11 @@
         mainFilename: 'main',
         activePaper: null,       // root .qmd selected in Papers panel (null = backend default)
         citationStyle: (localStorage.getItem('4dpapers_citation_style') || 'author-date'),
+        templateSettings: {
+            preset:    localStorage.getItem('4dpapers_template_preset') || 'academic',
+            addIndex:  localStorage.getItem('4dpapers_template_index') === 'true',
+            customCSS: localStorage.getItem('4dpapers_template_custom_css') || '',
+        },
         buildCache: {
             interactive: null,
             pdf: null,
@@ -1866,7 +1907,7 @@
         }
     });
 
-    // Export dropdown — Export to PDF (paperview + print) or Export to HTML (download)
+    // Export dropdown — Export to PDF (paperview + print) or Export to HTML (templated download)
     (function () {
         const wrap = document.querySelector('[data-purpose="export-wrap"]');
         const btn = document.querySelector('[data-purpose="export-button"]');
@@ -1910,19 +1951,18 @@
             }, 1000);
 
             try {
-                // Compile saves in-flight editor changes, then renders the chosen format.
-                const response = await fetch(fmt === 'pdf' ? '/api/export' : '/api/compile', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        files: state.editorContent,
-                        format: fmt === 'pdf' ? 'pdf' : 'html-export',
-                        target: state.activePaper,
-                        csl: state.citationStyle
-                    })
-                });
-
                 if (fmt === 'pdf') {
+                    // ── PDF export (unchanged) ─────────────────────────────
+                    const response = await fetch('/api/export', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            files: state.editorContent,
+                            format: 'pdf',
+                            target: state.activePaper,
+                            csl: state.citationStyle
+                        })
+                    });
                     if (!response.ok) {
                         const err = await response.json().catch(() => ({error: 'Export failed with status ' + response.status}));
                         buildProgress.finish(false);
@@ -1946,32 +1986,52 @@
                     logTitle.textContent = 'Build Log — PDF Export Ready';
                     setBuildLogPanelVisible(false);
                     setStatusBarState('PDF export ready', '#22c55e', 'ph-fill ph-check-circle');
+
                 } else {
-                    const result = await response.json();
-                    if (!(response.ok && result.status === 'success')) {
+                    // ── HTML export — apply configured template ────────────
+                    const tmpl = state.templateSettings || {};
+                    const response = await fetch('/api/export-with-template', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            files:      state.editorContent,
+                            target:     state.activePaper,
+                            csl:        state.citationStyle,
+                            template:   tmpl.preset    || 'academic',
+                            custom_css: tmpl.customCSS || '',
+                            add_index:  tmpl.addIndex  || false,
+                        })
+                    });
+
+                    if (!response.ok) {
+                        const err = await response.json().catch(() => ({error: 'Export failed with status ' + response.status}));
                         buildProgress.finish(false);
                         logTitle.style.color = '#ef4444';
                         logTitle.textContent = 'Build Log — HTML Export Failed';
-                        logOutput.textContent = formatBuildLogDisplay((result.log || result.error || 'HTML export failed').replace(/\u001b\[[0-9;]*m/g, ''), exportContext);
+                        logOutput.textContent = formatBuildLogDisplay(err.log || err.error || 'HTML export failed', exportContext);
                         setBuildLogPanelVisible(true);
                         setStatusBarState('HTML export failed', '#ef4444', 'ph-fill ph-x-circle');
-                        alert('Export failed:\n\n' + (result.error || 'Unknown error'));
+                        alert('Export failed:\n\n' + (err.error || 'Unknown error'));
                         return;
                     }
-                    // Download the compiled standalone HTML file.
-                    const r = await fetch('/output/' + result.filename + '?t=' + Date.now());
-                    const blob = await r.blob();
+
+                    // Response is the HTML blob streamed directly
+                    const htmlBlob = await response.blob();
+                    const cd = response.headers.get('Content-Disposition') || '';
+                    const m = cd.match(/filename="([^"]+)"/);
+                    const dlName = m ? m[1] : ((state.activePaper || 'document').replace(/\.qmd$/, '') + '-' + (tmpl.preset || 'academic') + '.html');
+
                     const a = document.createElement('a');
-                    a.href = URL.createObjectURL(blob);
-                    a.download = result.filename;
+                    a.href = URL.createObjectURL(htmlBlob);
+                    a.download = dlName;
                     document.body.appendChild(a); a.click(); a.remove();
                     URL.revokeObjectURL(a.href);
+
                     buildProgress.finish(true);
                     logTitle.style.color = '#22c55e';
                     logTitle.textContent = 'Build Log — HTML Export Ready';
-                    logOutput.textContent = formatBuildLogDisplay((result.log || '').replace(/\u001b\[[0-9;]*m/g, ''), exportContext);
                     setBuildLogPanelVisible(false);
-                    setStatusBarState('Standalone HTML ready', '#22c55e', 'ph-fill ph-check-circle');
+                    setStatusBarState('HTML export ready (' + (tmpl.preset || 'academic') + ' template)', '#22c55e', 'ph-fill ph-check-circle');
                 }
             } catch (error) {
                 buildProgress.finish(false);

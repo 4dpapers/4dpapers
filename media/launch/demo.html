@@ -1,0 +1,241 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  :root{
+    --ink:#0a0c14;--navy:#141725;--teal:#1FB6A3;--teal-deep:#138a7c;
+    --text:#EAF0F2;--muted:#8b93a7;--faint:#5b6478;--line:#242c44;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:1920px;height:1080px;overflow:hidden;background:#0a0c14;font-family:'Outfit',system-ui,sans-serif}
+  #stage{position:relative;width:1920px;height:1080px;
+    background:radial-gradient(1500px 1200px at 60% 42%, #14182a 0%, #0e1120 55%, #0a0c14 100%)}
+  .layer{position:absolute;inset:0;opacity:0}
+  #field{position:absolute;inset:0;opacity:.4}
+
+  /* corner marks */
+  .cross{position:absolute;width:15px;height:15px}
+  .cross:before,.cross:after{content:"";position:absolute;background:#37426b}
+  .cross:before{left:6.5px;top:0;width:2px;height:15px}.cross:after{left:0;top:6.5px;width:15px;height:2px}
+  .mk{position:absolute;font-family:'JetBrains Mono',monospace;color:var(--faint);font-size:16px;letter-spacing:.24em}
+
+  /* ---- TITLE ---- */
+  #tTitle{left:150px;top:0;height:1080px;display:flex;flex-direction:column;justify-content:center;width:1200px}
+  .kick{font-family:'JetBrains Mono',monospace;font-weight:500;font-size:21px;letter-spacing:.4em;color:var(--teal);text-transform:uppercase;margin-bottom:30px}
+  .word{font-weight:600;font-size:150px;line-height:.9;letter-spacing:-.035em;color:var(--text)}
+  .word .f{color:var(--teal)}
+  .rule{width:118px;height:3px;background:var(--teal);margin:38px 4px 34px;border-radius:2px;box-shadow:0 0 22px rgba(31,182,163,.5)}
+  .tg{font-weight:300;font-size:48px;color:#c9d1de}.tg b{font-weight:600;color:var(--teal)}
+
+  /* ---- WINDOW (shared chrome) ---- */
+  .win{position:absolute;border:1px solid #29314c;border-radius:16px;overflow:hidden;
+    background:linear-gradient(180deg,#12172700,#0f121e);box-shadow:0 40px 100px -40px #000}
+  .wbar{height:52px;display:flex;align-items:center;gap:10px;padding:0 20px;border-bottom:1px solid #222a40;background:#11152366}
+  .wbar .d{width:12px;height:12px;border-radius:50%}
+  .wbar .n{margin-left:14px;font-family:'JetBrains Mono',monospace;font-size:19px;color:#9aa3b8}
+  .wbar .btn{margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:17px;color:#0a1512;background:var(--teal);
+    padding:7px 16px;border-radius:8px;font-weight:600;letter-spacing:.02em;opacity:.35;transition:none}
+
+  /* ---- EDITOR ---- */
+  #tEditor .win{left:360px;top:180px;width:1200px;height:720px;background:linear-gradient(180deg,#0f1320,#0c0f1a)}
+  #code{padding:34px 40px;font-family:'JetBrains Mono',monospace;font-size:32px;line-height:1.62;color:#cdd5e4;white-space:pre-wrap}
+  .cur{display:inline-block;width:3px;height:34px;background:var(--teal);vertical-align:-6px;margin-left:2px}
+  .h{color:#82AAFF;font-weight:500}.sc{color:var(--teal)}.at{color:#C792EA}.st{color:#e7c07a}.tx{color:#9aa6bd}
+
+  /* ---- COMPILE SWEEP ---- */
+  #sweep{position:absolute;left:360px;top:180px;width:1200px;height:720px;border-radius:16px;overflow:hidden;pointer-events:none}
+  #sweepBar{position:absolute;top:0;bottom:0;width:230px;background:linear-gradient(90deg,transparent,rgba(31,182,163,.16),rgba(31,182,163,.5),rgba(31,182,163,.16),transparent)}
+  #compileTag{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-family:'JetBrains Mono',monospace;
+    font-size:30px;color:var(--teal);letter-spacing:.24em;text-transform:uppercase}
+
+  /* ---- REAL COMPILED HTML OUTPUT ---- */
+  #tHtml .win{left:300px;top:110px;width:1320px;height:860px;background:#fff}
+  #paperFrame{display:block;width:100%;height:808px;border:0;background:#fff}
+
+  /* ---- END ---- */
+  #tEnd{left:150px;top:0;height:1080px;width:1500px;display:flex;flex-direction:column;justify-content:center}
+  .eh{font-weight:600;font-size:104px;line-height:1.0;letter-spacing:-.03em;color:var(--text)}
+  .eh b{color:var(--teal)}
+  .cmd{margin-top:46px;background:linear-gradient(180deg,#141828,#10131f);border:1px solid #262d44;border-left:5px solid var(--teal);
+    border-radius:14px;padding:28px 32px;width:1500px}
+  .cmd code{font-family:'JetBrains Mono',monospace;font-size:26px;color:#d6dcea}
+  .cmd code .k{color:#7fd7c8}.cmd code .v{color:#e7c07a}
+  .erepo{margin-top:36px;font-family:'JetBrains Mono',monospace;font-weight:500;font-size:34px;color:var(--text)}
+  .erepo b{color:var(--teal)}
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="field" width="1920" height="1080"></canvas>
+  <div class="cross" style="left:60px;top:60px"></div>
+  <div class="cross" style="right:60px;top:60px"></div>
+  <div class="mk" id="mkTR" style="right:60px;top:100px">v0.1.2</div>
+  <div class="mk" id="mkBL" style="left:150px;bottom:56px">ISOCHRONE · 4D FIELD</div>
+
+  <!-- TITLE -->
+  <div class="layer" id="tTitle">
+    <div class="kick">Write · Embed figures · Ship one file</div>
+    <div class="word"><span class="f">4D</span>papers</div>
+    <div class="rule"></div>
+    <div class="tg">One file. Any browser. <b>Still&nbsp;alive.</b></div>
+  </div>
+
+  <!-- EDITOR -->
+  <div class="layer" id="tEditor">
+    <div class="win">
+      <div class="wbar"><span class="d" style="background:#e0655b"></span><span class="d" style="background:#e0b24f"></span><span class="d" style="background:#4fbf7f"></span><span class="n">paper.qmd</span><span class="btn" id="compileBtn">▶ Compile</span></div>
+      <div id="code"></div>
+    </div>
+  </div>
+
+  <!-- COMPILE SWEEP -->
+  <div class="layer" id="tSweep">
+    <div id="sweep"><div id="sweepBar"></div><div id="compileTag">Compiling…</div></div>
+  </div>
+
+  <!-- HTML OUTPUT -->
+  <div class="layer" id="tHtml">
+    <div class="win">
+      <div class="wbar"><span class="d" style="background:#e0655b"></span><span class="d" style="background:#e0b24f"></span><span class="d" style="background:#4fbf7f"></span><span class="n">paper.html</span></div>
+      <iframe id="paperFrame" title="Compiled 4Dpapers heart manuscript"
+        src="../../examples/heart/_output/paper-demo-standalone.html"></iframe>
+    </div>
+  </div>
+
+  <!-- END -->
+  <div class="layer" id="tEnd">
+    <div class="eh">A <b>document</b>,<br>not a dependency.</div>
+    <div class="cmd"><code><span class="k">IMAGE</span>=ghcr.io/4dpapers/4dpapers:<span class="v">0.1.2</span> <span class="k">FOURD_WORKSPACE</span>=./examples/niederer docker compose up</code></div>
+    <div class="erepo">→ github.com/<b>4dpapers/4dpapers</b></div>
+  </div>
+</div>
+
+<script>
+// ---------- isochrone backdrop ----------
+function lerp(a,b,t){return a+(b-a)*t}
+function hx(c){c=c.replace('#','');return[parseInt(c.slice(0,2),16),parseInt(c.slice(2,4),16),parseInt(c.slice(4,6),16)]}
+function ramp(t){const s=[[0,'#243a86'],[0.34,'#138a7c'],[0.62,'#c98a44'],[1,'#a5122a']];
+  for(let i=0;i<s.length-1;i++){if(t<=s[i+1][0]){const[a,c0]=s[i],[b,c1]=s[i+1],k=(t-a)/(b-a),A=hx(c0),B=hx(c1);
+    return`rgb(${Math.round(lerp(A[0],B[0],k))},${Math.round(lerp(A[1],B[1],k))},${Math.round(lerp(A[2],B[2],k))})`;}}return'#a5122a';}
+function drawField(fx,fy,amp){const cv=document.getElementById('field'),x=cv.getContext('2d');
+  x.clearRect(0,0,1920,1080);const N=50,rMin=28,rMax=1650;x.lineCap='round';
+  for(let i=0;i<N;i++){const p=i/(N-1),r=rMin+(rMax-rMin)*Math.pow(p,1.26),t=1-p;
+    x.beginPath();x.arc(fx,fy,r,0,Math.PI*2);x.strokeStyle=ramp(t);
+    x.globalAlpha=(0.1+0.4*Math.pow(1-p,1.6))*amp;x.lineWidth=r<440?1.5:1.1;x.stroke();}
+  const g=x.createRadialGradient(fx,fy,0,fx,fy,160);g.addColorStop(0,'rgba(233,120,90,'+(0.42*amp)+')');
+  g.addColorStop(.45,'rgba(31,182,163,'+(0.12*amp)+')');g.addColorStop(1,'transparent');
+  x.globalAlpha=1;x.fillStyle=g;x.beginPath();x.arc(fx,fy,160,0,Math.PI*2);x.fill();}
+
+// ---------- code content (typed) ----------
+const CODE=[
+  {t:'## Ventricular activation',c:'h'},
+  {t:'',c:'tx'},
+  {t:'The depolarization wavefront sweeps',c:'tx'},
+  {t:'through the tissue.',c:'tx'},
+  {t:'',c:'tx'},
+  {t:'{{< 4d-image src="heart.vtu" field="Vm" >}}',c:'sc'}
+];
+const FULL=CODE.map(l=>l.t).join('\n');
+function renderCode(nchars,showCur){
+  const shown=FULL.slice(0,nchars);
+  // colourise: heading line, shortcode line, prose
+  let html='';const lines=shown.split('\n');
+  for(let i=0;i<lines.length;i++){const ln=lines[i];
+    if(ln.startsWith('##')) html+='<span class="h">'+esc(ln)+'</span>';
+    else if(ln.startsWith('{{<')) html+=colShort(ln);
+    else html+='<span class="tx">'+esc(ln)+'</span>';
+    if(i<lines.length-1) html+='\n';
+  }
+  if(showCur) html+='<span class="cur"></span>';
+  document.getElementById('code').innerHTML=html;
+}
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function colShort(ln){var s=esc(ln);
+  s=s.replace(/("[^"]*")/g,'<span class="st">$1</span>');          // strings first
+  s=s.replace(/\b(src|field|time)=/g,'<span class="at">$1</span>=');// attrs next
+  s=s.replace(/(\{\{&lt;|&gt;\}\})/g,'<span class="sc">$1</span>'); // delimiters last
+  return s;}
+
+// ---------- real compiled paper ----------
+let paperReady=false;
+function preparePaper(){
+  const f=document.getElementById('paperFrame');
+  try{
+    const d=f.contentDocument;
+    if(!d||!d.getElementById('results'))return false;
+    d.documentElement.style.zoom='0.82';
+    d.documentElement.style.scrollBehavior='auto';
+    f.contentWindow.scrollTo(0,0);
+    paperReady=true;
+    return true;
+  }catch(_){return false;}
+}
+function updatePaper(prog){
+  if(!paperReady&&!preparePaper())return;
+  const f=document.getElementById('paperFrame');
+  const d=f.contentDocument;
+  const live=d.querySelector('#results iframe');
+  // Begin at the real paper title, then traverse the manuscript to its first live figure.
+  const y0=0;
+  const y1=live?Math.max(0,live.getBoundingClientRect().top+f.contentWindow.scrollY-90):0;
+  const scrollProg=Math.min(1,prog/0.78);
+  const ease=scrollProg*scrollProg*(3-2*scrollProg);
+  f.contentWindow.scrollTo(0,y0+(y1-y0)*ease);
+  if(live&&live.contentWindow){
+    const slider=live.contentDocument&&live.contentDocument.querySelector('input[type="range"]');
+    const count=slider?Math.max(1,parseInt(slider.max||'0',10)+1):5;
+    const figureProg=Math.max(0,Math.min(1,(prog-0.78)/0.22));
+    const idx=Math.min(count-1,Math.floor(figureProg*count));
+    live.contentWindow.postMessage({type:'4dpaper-time-apply',fig_id:'demo-controller',idx:idx,playing:false},'*');
+    const rotate=live.contentWindow.csRotate_heart_vm;
+    if(typeof rotate==='function'&&!live.contentWindow.__demoRotated){
+      rotate(12,-4);
+      live.contentWindow.__demoRotated=true;
+    }
+  }
+}
+document.getElementById('paperFrame').addEventListener('load',preparePaper);
+
+// ---------- timeline ----------
+function win(t,a,b,c,d){if(t<a||t>d)return 0;if(t<b)return (t-a)/(b-a);if(t>c)return 1-(t-c)/(d-c);return 1;}
+function set(id,o){document.getElementById(id).style.opacity=o;}
+const DUR=20.4;
+function seek(t){
+  // backdrop focus drifts subtly per phase
+  let fx=1180,fy=470,amp=1;
+  if(t<2.8){fx=1220;fy=470;amp=1;}
+  else if(t<7.6){fx=1560;fy=250;amp=.5;}
+  else if(t<8.4){fx=960;fy=540;amp=.9;}
+  else if(t<18.2){fx=1560;fy=250;amp=.4;}
+  else{fx=1180;fy=820;amp=1;}
+  drawField(fx,fy,amp);
+
+  const oT=win(t,0.0,0.5,2.3,2.8), oE=win(t,2.6,3.0,7.3,7.7),
+        oS=win(t,7.2,7.45,8.0,8.35), oH=win(t,8.0,8.45,18.0,18.4),
+        oEnd=win(t,18.0,18.4,20.4,20.8);
+  set('tTitle',oT);set('tEditor',oE);set('tSweep',oS);set('tHtml',oH);set('tEnd',oEnd);
+  document.getElementById('mkTR').style.opacity=Math.max(oT,oEnd)?0.9:0.5;
+
+  // editor typing 3.0 -> 6.7
+  const tp=Math.max(0,Math.min(1,(t-3.0)/3.7));
+  renderCode(Math.round(tp*FULL.length), oE>0.4 && (Math.floor(t*2)%2===0 || tp<1));
+  document.getElementById('compileBtn').style.opacity=(tp>=1?(0.35+0.65*Math.min(1,(t-6.7)*3)):0.35);
+
+  // sweep bar 7.2 -> 8.1
+  const sp=Math.max(0,Math.min(1,(t-7.2)/0.95));
+  document.getElementById('sweepBar').style.left=(sp*1430-230)+'px';
+  document.getElementById('compileTag').style.opacity=win(t,7.25,7.4,7.75,8.05);
+
+  // Real compiled manuscript: scroll into its live heart viewer and advance actual data.
+  const pp=Math.max(0,Math.min(1,(t-8.25)/9.75));
+  updatePaper(pp);
+
+  window.__t=t;
+}
+window.seek=seek; window.__DUR=DUR;
+seek(0);
+window.__ready=true;
+</script>
+</body>
+</html>

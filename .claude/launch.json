@@ -12,6 +12,18 @@
       "runtimeExecutable": "python3",
       "runtimeArgs": ["-m", "http.server", "5188", "--directory", "examples/niederer/_output"],
       "port": 5188
+    },
+    {
+      "name": "dashboard",
+      "runtimeExecutable": "venv/bin/python",
+      "runtimeArgs": ["serve.py", "--port", "5199"],
+      "port": 5199
+    },
+    {
+      "name": "heart-output",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "5177", "--directory", "examples/heart/_output"],
+      "port": 5177
     }
   ]
 }
