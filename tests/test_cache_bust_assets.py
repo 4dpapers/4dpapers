@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import importlib
+import pathlib
+import subprocess
 import sys
 from pathlib import Path
 
@@ -73,12 +75,19 @@ def test_paperview_skips_cache_busting(cache_bust, tmp_path, monkeypatch):
 
 
 def test_cache_bust_hook_registered_in_all_project_templates():
-    project_files = [
-        _REPO / "_quarto.yml",
-        _REPO / "examples" / "niederer" / "_quarto.yml",
-        _REPO / "examples" / "heart" / "_quarto.yml",
-        _REPO / "examples" / "heart" / "data" / "monodomainHeart" / "_quarto.yml",
-    ]
+    """Every tracked Quarto project template must register the hook.
+
+    Discovered via git rather than hardcoded: a hardcoded list previously
+    referenced examples/heart/, which is gitignored, so the test could only
+    pass on one machine.
+    """
+    tracked = subprocess.run(
+        ["git", "ls-files", "*_quarto.yml"],
+        cwd=_REPO, capture_output=True, text=True, check=True,
+    ).stdout.split()
+    project_files = [_REPO / p for p in tracked if pathlib.PurePosixPath(p).name == "_quarto.yml"]
+
+    assert project_files, "no tracked _quarto.yml project templates found"
 
     for path in project_files:
         text = path.read_text(encoding="utf-8")
