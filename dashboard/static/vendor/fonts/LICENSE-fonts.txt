@@ -1,0 +1,28 @@
+Vendored web fonts — license notice
+====================================
+
+All font families in this directory are distributed under the SIL Open Font
+License, version 1.1 (https://openfontlicense.org/), which permits bundling
+and redistribution, including in this project.
+
+Families and sources (fetched from the Google Fonts CSS API, Google's own
+distribution of the upstream OFL-licensed font files):
+
+- JetBrains Mono   — https://fonts.google.com/specimen/JetBrains+Mono
+- Outfit            — https://fonts.google.com/specimen/Outfit
+- Crimson Pro       — https://fonts.google.com/specimen/Crimson+Pro
+- Inter             — https://fonts.google.com/specimen/Inter
+- Source Sans 3     — https://fonts.google.com/specimen/Source+Sans+3
+- Lato              — https://fonts.google.com/specimen/Lato
+
+Crimson Pro, Inter, Source Sans 3, and Lato were added to support the named
+HTML export templates in _extensions/4dpaper/export_templates.py (academic,
+modern, compact, preprint). Files are the latin-subset .woff2 faces at the
+weights/styles each template uses:
+
+- Crimson Pro:   400 normal, 600 normal, 400 italic
+- Inter:         400, 500, 600, 700 (normal)
+- Source Sans 3: 400, 600 (normal)
+- Lato:          400 normal, 700 normal, 400 italic
+
+No modifications were made to the font files themselves.
