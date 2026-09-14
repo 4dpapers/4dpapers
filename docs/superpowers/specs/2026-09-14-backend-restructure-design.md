@@ -2,7 +2,10 @@
 
 Date: 2026-09-14
 Status: Approved for planning
-Releases: v0.1.3 → v0.1.4 → v0.1.5 → v0.1.6 → v0.2.0
+Phases: Land in-flight (shipped 0.1.3/0.1.4) → Foundation → Backend modules
+→ Render pipeline → Frontend seam
+
+Version numbers are assigned when a phase is tagged, not before.
 
 ## 1. Goal
 
@@ -170,7 +173,7 @@ Depends on: `readers/`, pyvista, jinja2.
 ### 4.3 `publish/`
 
 Quarto orchestration: profile selection, render invocation, output validation,
-template injection, signing. This is where the v0.1.4 LaTeX export lands properly.
+template injection, signing. This is where the Phase 1 LaTeX export lands properly.
 `compile_plugin.py` is 557 lines today largely because it *is* the publish layer
 wearing an HTTP costume.
 
@@ -208,7 +211,7 @@ Behaviour change and structure change never occur in the same release.
 
 Work ships in PR-sized batches, one reviewable idea each, CI green per PR.
 
-### v0.1.3 — Land what is already built
+### Phase 0 — Land what is already built (shipped)
 
 The four in-flight features, released ahead of the test rebuild so finished work
 is not held behind it.
@@ -220,9 +223,9 @@ is not held behind it.
 | 3 | Land live file sync **and its first tests** (0% today) |
 | 4 | Land LaTeX PDF export **and `export_templates` tests** (0% today) |
 
-Tag **v0.1.3**.
+Shipped as **0.1.3**, with **0.1.4** patching a figure-placeholder defect.
 
-### v0.1.4 — Foundation and honest tests
+### Phase 1 — Foundation and honest tests
 
 No module moves. No restructuring. No behaviour change except fidelity fixes.
 
@@ -243,21 +246,21 @@ fix is demonstrated rather than asserted).
 PR 10 is deliberately a red build. A harness that passes on first run has not
 been shown to detect anything.
 
-Tag **v0.1.4** — the frozen behavioural baseline for every later release.
+Ends Phase 1. Tag when cut.
 
-### v0.1.5 — Backend modules, lower risk
+### Phase 2 — Backend modules, lower risk
 
 `readers/`, `publish/`, `server/`, each with a declared contract and no private
-cross-imports. Tag **v0.1.5**.
+cross-imports. Ends Phase 2. Tag when cut.
 
-### v0.1.6 — Render pipeline
+### Phase 3 — Render pipeline
 
 `figures/` alone: kind registry, templates out of Python strings, public API
 replacing the ~40 cross-imported private names. Isolated because this layer
 broke once before, and because a regression here must be bisectable.
-Tag **v0.1.6**.
+Ends Phase 3. Tag when cut.
 
-### v0.2.0 — Frontend seam
+### Phase 4 — Frontend seam
 
 Extract `index.html`'s 1662 inline JS lines alongside the twelve modules already
 present. Formalize the postMessage protocol. Preserve behaviour.
@@ -280,7 +283,7 @@ Work is assigned by how much judgment it needs, not by size:
 
 ## 8. Acceptance
 
-Every release ends with the v0.1.4 fidelity suite green. "We did not lose what
+Every release ends with the Phase 1 fidelity suite green. "We did not lose what
 works today" is a command that can be run, not a hope.
 
 Per-release gates:
@@ -303,3 +306,50 @@ Per-release gates:
   knowledge nothing else in the repo holds. What is removed: comments that
   restate code, section-divider art, and docstrings describing history rather
   than contract.
+
+## 10. Carried forward from Phase 0
+
+Found by the whole-release review of 0.1.3, which saw the four features
+together for the first time. Each per-PR review saw only its own diff and
+could not have caught these.
+
+Fixed in 0.1.4:
+
+- PDF export could ship placeholder prose in place of a figure.
+  `run_quarto_render` armed `FOURD_STRICT_STATIC_EXPORT` for paperview but not
+  for native PDF, so a failed figure only warned; `shortcodes.lua`'s LaTeX
+  branch then emitted `[Figure <id> — run 'Export PDF' ...]` as body text, and
+  no validator on the PDF path checks `_PLACEHOLDER_MARKERS`.
+
+Open, for Phase 1 or later:
+
+- **Live file sync has no client.** No `/api/sync` or WebSocket code exists in
+  `dashboard/static/`. The feature is unreachable; only its attack surface
+  shipped. Either build the client or remove the endpoint.
+- **The watcher and the render pipeline collide.** `state/figures/` and
+  `_output/` are not excluded, so every compile makes watchdog read and
+  broadcast multi-MB figure HTML, with no size cap (`POST /api/file` caps at
+  10 MB; the broadcast at nothing). `on_modified` only, so atomic-rename saves
+  are missed and a mid-write read can broadcast a truncated file.
+- **Export templates never load their fonts.** `vendor/fonts/fonts.css` is
+  linked only from `index.html`; `apply_template` injects family names but no
+  `@font-face`, so all four templates fall back everywhere. The vendoring
+  prevents the offline regression but delivers no typography.
+- **`apply_template` is HTML-only**, never applied to PDF — a direct breach of
+  the cross-target fidelity invariant in section 2.
+- `_validate_standalone_html_output` only checks `state/figures/` references,
+  so a `4d-subimages` `<img src="data/...">` passes with broken images. The new
+  `?v=` cache-bust also defeats pandoc's `embed-resources`.
+- `_validate_native_pdf_output` checks magic bytes, `%%EOF` and a 1000-byte
+  minimum; it cannot detect a PDF that rendered without its figures.
+- An unknown template name silently falls back to `academic`; it should 400.
+- `custom_css` is injected raw, so `</style><script>` escapes the block.
+- Grid shortcodes emit `RawBlock` LaTeX with raw relative paths, unlike
+  `4d-image`'s `pandoc.Image`, so pandoc never rewrites them; with no caption
+  the `figure`/`\caption`/`\label` wrapper is omitted entirely.
+- Two machine-dependent skips remain (`h5py` missing; an unloadable HDF5
+  fixture). Make `h5py` a dependency — that skip hides a failure.
+- `_rewrite_paperview_asset_urls_for_pdf` now has no production callers, only
+  tests — the same shape as the dead code removed in 0.1.3.
+- `file_plugin` and `sync_plugin` each carry an independent `_PROJECT_ROOT`
+  global — an instance of the duplication section 4.4 consolidates.
