@@ -121,9 +121,23 @@ Adding a format is one new file; no existing file is edited. Dissolves the
 
 Two deliberate choices:
 
-- **`open_source()` takes a `SourceHandle`, not a `Path`.** Only the local
-  implementation ships. A future remote or streamed source becomes one new
-  handle type rather than a change to 27 readers.
+- **`open_source()` takes a `SourceHandle`, not a `Path`.** This is not designing
+  for a hypothetical. Readers already implement five inconsistent answers to
+  "how do I get at these bytes": direct open; sibling scan (`processor*` globbed
+  from `case_path.parent`, `data_loader.py:103,185`); temp staging with symlinks
+  and a synthetic `_temp_reader.foam` (`:193-204`); gzip decompression (`:533`);
+  and index-relative resolution (`:245`). The third forces a `cleanup()`/`__del__`
+  lifecycle onto the class (`:468,485`) purely to delete temp dirs — and
+  `__del__` teardown is non-deterministic and can fire during interpreter
+  shutdown. `SourceHandle` names the thing that already exists in five copies
+  and gives it one deterministic lifecycle:
+
+      with open_source(handle) as src:
+          mesh = src.mesh_at(0)
+
+  Remote or streamed sources then become one new handle class. That is a
+  consequence, not the justification.
+
 - **`field_range(field, steps)` is in the contract.** There is exactly one way
   to ask a field's range, and it takes the steps you care about. This makes the
   `clim` divergence unrepresentable rather than merely fixed.
@@ -192,23 +206,42 @@ history stays; rewriting a published repo's history is not worth 12.9 MB.
 
 Behaviour change and structure change never occur in the same release.
 
+Work ships in PR-sized batches, one reviewable idea each, CI green per PR.
+
+### v1.0.3 — Land what is already built
+
+The four in-flight features, released ahead of the test rebuild so finished work
+is not held behind it.
+
+| PR | Content |
+|---|---|
+| 1 | Delete `updatemenus.json`; land cache busting + `breakable-code.lua` |
+| 2 | Land `4d-subimages` + `4d-graph-panel` |
+| 3 | Land live file sync **and its first tests** (0% today) |
+| 4 | Land LaTeX PDF export **and `export_templates` tests** (0% today) |
+
+Tag **v1.0.3**.
+
 ### v1.1 — Foundation and honest tests
 
-No module moves. No restructuring.
+No module moves. No restructuring. No behaviour change except fidelity fixes.
 
-1. Land the four in-flight features (LaTeX PDF export, `4d-subimages` /
-   `4d-graph-panel`, live file sync, cache busting). Write tests for
-   `sync_plugin` and `export_templates`, both at 0%. Delete `updatemenus.json`.
-2. Make the project an installable package (`pyproject.toml`). This deletes the
-   ten importlib shims, nine `sys.path` edits, and the `os.execv` re-launch as a
-   side effect, and is the prerequisite for a rebuildable test suite.
-3. Rebuild the test suite: add `conftest.py` with shared fixtures, repoint the
-   five dead tests at `examples/niederer`, and resolve all 30 skip/importorskip
-   hatches. **No silent skip survives** — each becomes a real test or is deleted.
-4. Configure `.gitattributes` + LFS policy.
-5. CI: enable `PLAYWRIGHT_E2E`, add ruff and mypy gates.
-6. Build the cross-target fidelity harness. Expect failures.
-7. Fix every divergence it finds, starting with `clim`.
+| PR | Content | CI must prove |
+|---|---|---|
+| 5 | `pyproject.toml`, installable package | Import works with no `sys.path` edits |
+| 6 | Delete 10 importlib shims, 9 `sys.path` edits, `os.execv` re-launch | Suite green and smaller |
+| 7 | `conftest.py` + shared fixtures; repoint the 5 dead tests at `examples/niederer` | Those 5 tests **run** |
+| 8 | Resolve the remaining skip/importorskip hatches | Skip count near zero |
+| 9 | `.gitattributes`/LFS; ruff + mypy in CI; `PLAYWRIGHT_E2E=1` | New gates enforced |
+| 10 | Cross-target fidelity harness | **Build fails** — the harness detects the bug |
+| 11 | Fix `clim` and siblings | Harness green |
+
+Ordering constraints: 5 → 6 → 7 (shims cannot go before the package exists;
+`conftest` cannot go before imports work) and 10 → 11 (harness before fix, so the
+fix is demonstrated rather than asserted).
+
+PR 10 is deliberately a red build. A harness that passes on first run has not
+been shown to detect anything.
 
 Tag **v1.1** — the frozen behavioural baseline for every later release.
 
@@ -229,7 +262,23 @@ Tag **v1.3**.
 Extract `index.html`'s 1662 inline JS lines alongside the twelve modules already
 present. Formalize the postMessage protocol. Preserve behaviour.
 
-## 7. Acceptance
+## 7. Execution
+
+Every batch is a pull request against `main`, reviewed before the next starts.
+`pr-regressions.yml` already runs the full suite with Quarto and headless GL on
+every PR; the ruff, mypy, `PLAYWRIGHT_E2E` and fidelity gates are added by the
+PRs that create them (5, 9, 10) and enforced from then on.
+
+Work is assigned by how much judgment it needs, not by size:
+
+| Batch | Executor | Why |
+|---|---|---|
+| 1, 2 | Either | Landing tested work |
+| 3, 4 | Opus | Deciding what to assert for two untested modules |
+| 5–9 | Sonnet | Mechanical, fully specified, objective pass/fail |
+| 10, 11 | Opus | Defining what "the same figure" means across targets, and setting perceptual tolerances that catch a 38% colour shift without failing on antialiasing |
+
+## 8. Acceptance
 
 Every release ends with the v1.1 fidelity suite green. "We did not lose what
 works today" is a command that can be run, not a hope.
@@ -243,7 +292,7 @@ Per-release gates:
 - No new `pytest.skip` without an accompanying issue reference.
 - ruff and mypy clean.
 
-## 8. Non-goals
+## 9. Non-goals
 
 - Redesigning the frontend UI.
 - Remote simulation execution. The `SourceHandle` contract keeps it possible;
