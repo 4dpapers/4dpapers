@@ -211,6 +211,56 @@ class TestRunQuartoRenderPdf:
         assert "FOURD_APP_MODE" not in captured["env"]
 
 
+def _captured_env_for_format(fmt):
+    """Run `run_quarto_render` with subprocess.Popen mocked out and return the
+    env dict it would have handed to Quarto, without actually executing it."""
+    import tempfile
+    from unittest.mock import patch, MagicMock
+    from dashboard.utils import run_quarto_render
+
+    captured = {}
+
+    def fake_popen(cmd, **kwargs):
+        captured["cmd"] = cmd
+        captured["env"] = kwargs.get("env", {})
+        proc = MagicMock()
+        proc.stdout.__iter__ = lambda s: iter([])
+        proc.wait.return_value = None
+        proc.returncode = 0
+        return proc
+
+    with tempfile.TemporaryDirectory() as tmp:
+        qmd = Path(tmp) / "paper.qmd"
+        qmd.write_text("# Test\n")
+        with patch("subprocess.Popen", fake_popen):
+            run_quarto_render(qmd, [], output_format=fmt)
+
+    return captured["env"]
+
+
+def test_pdf_render_arms_strict_static_export():
+    """A failed figure must abort a PDF render, not degrade to placeholder text.
+
+    shortcodes.lua emits "[Figure <id> - run 'Export PDF' ...]" when no figure
+    file exists. Without FOURD_STRICT_STATIC_EXPORT the pre-render hook only
+    warns, so the PDF ships that sentence in place of the figure.
+    """
+    import dashboard.utils as u
+    env = _captured_env_for_format("pdf")
+    assert env.get("FOURD_STRICT_STATIC_EXPORT") == "1"
+
+
+def test_paperview_render_still_arms_strict_static_export():
+    env = _captured_env_for_format("paperview")
+    assert env.get("FOURD_STRICT_STATIC_EXPORT") == "1"
+
+
+def test_html_render_does_not_arm_strict_static_export():
+    """Interactive HTML must still render when a PNG cannot be produced."""
+    env = _captured_env_for_format("html")
+    assert env.get("FOURD_STRICT_STATIC_EXPORT") is None
+
+
 class TestMaybeSignRenderedHtml:
     def test_appends_log_when_signing_occurs(self, tmp_path):
         from unittest.mock import patch
