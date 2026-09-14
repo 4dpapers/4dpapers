@@ -451,12 +451,13 @@ local function _grid_columns(count, layout, ncols)
 end
 
 local function _grid_rows(count, cols, layout)
+  local needed = math.ceil(count / math.max(1, cols))
   local rows = nil
   if layout then
     rows = tonumber(tostring(layout):match("x(%d+)$"))
   end
-  if rows then return rows end
-  return math.ceil(count / math.max(1, cols))
+  if rows and rows >= needed then return rows end
+  return needed
 end
 
 local function _subfigure_grid_html(items, cols, gap, cell_html_fn, rows, fill_height)
@@ -1522,6 +1523,9 @@ local function fourd_graph_panel(args, kwargs)
     return pandoc.RawBlock("latex", table.concat(lines))
   end
 end
+
+-- Exposed for unit tests only. Quarto ignores globals it does not use.
+_FOURD_GRID_TEST = { columns = _grid_columns, rows = _grid_rows }
 
 return {
   ["4d-image"]       = fourd_image,

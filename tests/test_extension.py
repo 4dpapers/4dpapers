@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 import time
 from pathlib import Path
@@ -968,8 +969,11 @@ def test_subimages_shortcode_registered_as_lua_only_grid():
         Path(__file__).parent.parent / "_extensions" / "4dpaper" / "shortcodes.lua"
     ).read_text()
 
-    assert '["4d-subimages"]   = fourd_subimages,' in lua
-    assert "local function fourd_subimages(args, kwargs)" in lua
+    # Whitespace-tolerant: these assert the wiring exists, not exact column
+    # alignment, so harmless reformatting of the shortcode table doesn't
+    # break the test.
+    assert re.search(r'\["4d-subimages"\]\s*=\s*fourd_subimages', lua)
+    assert re.search(r'local\s+function\s+fourd_subimages\s*\(', lua)
     # Reads the same srcN/idN/layout grid attributes as 4d-panel/4d-graph-panel.
     assert "local items = _numbered_items(kwargs)" in lua
 
@@ -982,6 +986,47 @@ def test_subimages_shortcode_registered_as_lua_only_grid():
     )
     fourdpaper_src = spec.origin
     assert "subimages" not in Path(fourdpaper_src).read_text()
+
+
+def _run_lua_grid(count, cols, layout):
+    """Execute the real Lua grid helpers, not a Python reimplementation."""
+    import shutil, subprocess, json
+    lua_bin = shutil.which("lua") or shutil.which("lua5.4")
+    if lua_bin:
+        cmd = [lua_bin]
+    elif shutil.which("quarto"):
+        cmd = ["quarto", "pandoc", "lua"]
+    else:
+        raise RuntimeError("no Lua interpreter available")
+
+    script = f'''
+        pandoc = pandoc or {{}}
+        dofile("_extensions/4dpaper/shortcodes.lua")
+        local c = _FOURD_GRID_TEST.columns({count}, "{layout}", nil)
+        local r = _FOURD_GRID_TEST.rows({count}, c, "{layout}")
+        print(c .. "," .. r)
+    '''
+    out = subprocess.run(cmd + ["-e", script], capture_output=True, text=True)
+    if out.returncode != 0:
+        raise RuntimeError(f"lua failed: {out.stderr[:400]}")
+    cols_out, rows_out = out.stdout.strip().splitlines()[-1].split(",")
+    return int(cols_out), int(rows_out)
+
+
+def test_grid_layout_never_clips_subfigures():
+    """An explicit layout must never hide items the author supplied.
+
+    graph-panel fixes container height at rows*450px with overflow:hidden,
+    so a row count smaller than the item count silently deletes figures
+    from the rendered paper.
+    """
+    cols, rows = _run_lua_grid(6, 2, "2x2")
+    assert cols * rows >= 6, f"layout 2x2 with 6 items shows only {cols*rows}"
+
+
+def test_grid_layout_respects_explicit_layout_when_large_enough():
+    cols, rows = _run_lua_grid(2, 2, "2x2")
+    assert (cols, rows) == (2, 2)
 
 
 def test_parse_graph_panel_shortcode_reads_sources():
