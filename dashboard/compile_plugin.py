@@ -208,6 +208,40 @@ def _validate_native_pdf_output(pdf_path: Path) -> None:
         raise ValueError(f"PDF output appears truncated or empty: {pdf_path.name}")
 
 
+_REMOTE_MD_ASSET_RE = re.compile(
+    r"!\[[^\]]*\]\(\s*(https?://[^\s)]+)",
+    re.IGNORECASE,
+)
+
+
+def _validate_no_remote_sources(qmd_path: Path) -> None:
+    """Reject remote assets before Quarto renders a PDF.
+
+    Quarto's LaTeX writer fetches remote images over the network to embed
+    them. Offline export must not reach the network, and when it cannot,
+    pandoc fails with an unreadable Lua traceback rather than naming the
+    asset. Checking the source first keeps the old, actionable error.
+
+    Only the given QMD file is scanned — files pulled in via
+    `{{< include ... >}}` are not followed, so a remote reference nested in
+    an included file will not be caught here and will still surface as a
+    pandoc traceback.
+
+    Set FOURD_PDF_ALLOW_REMOTE=1 to opt in to remote fetching.
+    """
+    if _remote_pdf_assets_allowed():
+        return
+    text = qmd_path.read_text(encoding="utf-8", errors="replace")
+    found = _REMOTE_MD_ASSET_RE.findall(text) + [
+        u for u in _REMOTE_SUBRESOURCE_RE.findall(text) if _is_remote_url(u)
+    ]
+    if found:
+        raise ValueError(
+            "Remote resources are disabled during offline PDF export: "
+            f"{found[0]}"
+        )
+
+
 def _health_payload() -> tuple[int, dict]:
     """Return `(status_code, payload)` for backend readiness checks."""
     main_qmd = _find_main_qmd()
@@ -447,6 +481,8 @@ class ExportHandler(SecureMixin, tornado.web.RequestHandler):
 
             # Step 1: render native PDF. The 4Dpapers pre-render hook runs
             # first and refreshes static figure assets for LaTeX to include.
+            _validate_no_remote_sources(main_qmd)
+
             global _active_build_log
             _active_build_log.clear()
             log_lines: list[str] = _active_build_log

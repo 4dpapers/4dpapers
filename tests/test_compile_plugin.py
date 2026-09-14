@@ -171,3 +171,27 @@ def test_validate_native_pdf_output_rejects_truncated_pdf(tmp_path):
 
     with pytest.raises(ValueError, match="truncated|empty"):
         _validate_native_pdf_output(pdf)
+
+
+def test_remote_image_in_source_blocks_pdf_export(tmp_path):
+    """A remote image must be refused by name, not by pandoc traceback."""
+    from dashboard.compile_plugin import _validate_no_remote_sources
+    qmd = tmp_path / "paper.qmd"
+    qmd.write_text("# T\n\n![fig](https://example.com/remote.png)\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="Remote resources are disabled"):
+        _validate_no_remote_sources(qmd)
+
+
+def test_local_image_in_source_allows_pdf_export(tmp_path):
+    from dashboard.compile_plugin import _validate_no_remote_sources
+    qmd = tmp_path / "paper.qmd"
+    qmd.write_text("# T\n\n![fig](data/local.png)\n", encoding="utf-8")
+    _validate_no_remote_sources(qmd)  # must not raise
+
+
+def test_remote_image_allowed_when_opted_in(tmp_path, monkeypatch):
+    from dashboard.compile_plugin import _validate_no_remote_sources
+    monkeypatch.setenv("FOURD_PDF_ALLOW_REMOTE", "1")
+    qmd = tmp_path / "paper.qmd"
+    qmd.write_text("# T\n\n![fig](https://example.com/remote.png)\n", encoding="utf-8")
+    _validate_no_remote_sources(qmd)  # must not raise
