@@ -23,6 +23,13 @@ RUN apt-get update && apt-get install -y \
     libpango-1.0-0 \
     libpangoft2-1.0-0 \
     libfontconfig1 \
+    latexmk \
+    lmodern \
+    texlive-fonts-recommended \
+    texlive-latex-base \
+    texlive-latex-extra \
+    texlive-latex-recommended \
+    texlive-luatex \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Quarto (architecture-aware)

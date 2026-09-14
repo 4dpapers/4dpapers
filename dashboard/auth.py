@@ -195,6 +195,11 @@ class AuthenticatedStaticFileHandler(SecureMixin, tornado.web.StaticFileHandler)
     def set_default_headers(self) -> None:
         self.apply_cors_headers(methods="GET, HEAD, OPTIONS")
 
+    def set_extra_headers(self, path: str) -> None:
+        self.set_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+        self.set_header("Pragma", "no-cache")
+        self.set_header("Expires", "0")
+
     def options(self, path: str) -> None:
         self.finish()
 

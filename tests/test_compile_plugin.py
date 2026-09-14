@@ -57,6 +57,50 @@ def test_validate_paperview_html_accepts_app_root_state_asset(tmp_path):
         _validate_paperview_html_output(html)
 
 
+def test_validate_paperview_html_accepts_versioned_state_asset(tmp_path):
+    from dashboard.compile_plugin import _validate_paperview_html_output
+    from unittest.mock import patch
+
+    project_root = tmp_path / "project"
+    output_dir = project_root / "_output"
+    figures_dir = project_root / "state" / "figures"
+    output_dir.mkdir(parents=True)
+    figures_dir.mkdir(parents=True)
+    (figures_dir / "fig-vm.png").write_bytes(b"png")
+
+    html = output_dir / "paper-paperview.html"
+    html.write_text('<img src="/state/figures/fig-vm.png?v=abc123">', encoding="utf-8")
+
+    with patch("dashboard.compile_plugin._PROJECT_ROOT", project_root):
+        _validate_paperview_html_output(html)
+
+
+def test_validate_paperview_html_rejects_remote_pdf_assets(tmp_path):
+    from dashboard.compile_plugin import _validate_paperview_html_output
+
+    html = tmp_path / "paper-paperview.html"
+    html.write_text(
+        '<img src="https://latex.codecogs.com/svg.latex?E%3Dmc%5E2">',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="remote assets"):
+        _validate_paperview_html_output(html)
+
+
+def test_validate_paperview_html_allows_remote_pdf_assets_when_enabled(tmp_path, monkeypatch):
+    from dashboard.compile_plugin import _validate_paperview_html_output
+
+    monkeypatch.setenv("FOURD_PDF_ALLOW_REMOTE", "1")
+    html = tmp_path / "paper-paperview.html"
+    html.write_text(
+        '<img src="https://latex.codecogs.com/svg.latex?E%3Dmc%5E2">',
+        encoding="utf-8",
+    )
+
+    _validate_paperview_html_output(html)
+
+
 def test_validate_paperview_html_rejects_placeholder_warning(tmp_path):
     from dashboard.compile_plugin import _validate_paperview_html_output
 
@@ -92,6 +136,43 @@ def test_rewrite_paperview_asset_urls_for_pdf_converts_state_root_url():
     assert 'src="../state/figures/fig-at.png"' in rewritten
 
 
+def test_rewrite_paperview_asset_urls_for_pdf_strips_cache_queries():
+    from dashboard.compile_plugin import _rewrite_paperview_asset_urls_for_pdf
+
+    html = '<img src="/state/figures/fig-vm.png?v=abc"><img src="../state/figures/fig-at.png?v=def">'
+    rewritten = _rewrite_paperview_asset_urls_for_pdf(html)
+
+    assert 'src="../state/figures/fig-vm.png"' in rewritten
+    assert 'src="../state/figures/fig-at.png"' in rewritten
+    assert "?v=" not in rewritten
+
+
+def test_validate_native_pdf_output_accepts_valid_pdf(tmp_path):
+    from dashboard.compile_plugin import _validate_native_pdf_output
+
+    pdf = tmp_path / "paper.pdf"
+    pdf.write_bytes(b"%PDF-1.7\n" + b"0" * 1200 + b"\n%%EOF\n")
+
+    _validate_native_pdf_output(pdf)
+
+
+def test_validate_native_pdf_output_rejects_missing_pdf(tmp_path):
+    from dashboard.compile_plugin import _validate_native_pdf_output
+
+    with pytest.raises(FileNotFoundError, match="PDF output not found"):
+        _validate_native_pdf_output(tmp_path / "missing.pdf")
+
+
+def test_validate_native_pdf_output_rejects_truncated_pdf(tmp_path):
+    from dashboard.compile_plugin import _validate_native_pdf_output
+
+    pdf = tmp_path / "paper.pdf"
+    pdf.write_bytes(b"%PDF-1.7\nnot finished")
+
+    with pytest.raises(ValueError, match="truncated|empty"):
+        _validate_native_pdf_output(pdf)
+
+
 def test_pdf_url_fetcher_blocks_remote_and_logs():
     """The offline PDF fetcher refuses remote URLs and records them in the log."""
     from dashboard.compile_plugin import _make_pdf_url_fetcher
@@ -99,12 +180,23 @@ def test_pdf_url_fetcher_blocks_remote_and_logs():
     log: list[str] = []
     fetch = _make_pdf_url_fetcher(log)
 
-    for url in ("http://example.com/a.png", "https://cdn.x/y.css", "ftp://h/f"):
+    for url in (
+        "http://example.com/a.png",
+        "https://cdn.x/y.css",
+        "https://fonts.googleapis.com/css2?family=Inter",
+        "ftp://h/f",
+    ):
         with pytest.raises(ValueError, match="[Rr]emote"):
             fetch(url)
 
-    assert len(log) == 3
-    assert all("example.com" in m or "cdn.x" in m or "ftp://h" in m for m in log)
+    assert len(log) == 4
+    assert all(
+        "example.com" in m
+        or "cdn.x" in m
+        or "fonts.googleapis.com" in m
+        or "ftp://h" in m
+        for m in log
+    )
 
 
 def test_pdf_url_fetcher_allows_data_uri():
@@ -177,9 +269,3 @@ def test_pdf_render_with_remote_reference_does_not_hang():
     assert elapsed < 15, f"render took {elapsed:.1f}s — remote fetch likely hung"
     assert any("192.0.2.1" in m for m in log)
 
-
-def test_pdf_render_timeout_is_bounded():
-    """The export timeout must be a sane backstop, not a 15-minute network wait."""
-    from dashboard.compile_plugin import _PDF_RENDER_TIMEOUT_S
-
-    assert 30 <= _PDF_RENDER_TIMEOUT_S <= 300

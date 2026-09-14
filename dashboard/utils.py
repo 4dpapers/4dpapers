@@ -20,7 +20,8 @@ def run_quarto_render(
     Supported `output_format` values:
       - `html`: dashboard preview HTML (app mode)
       - `html-export`: standalone interactive HTML export
-      - `paperview`: static HTML used for PDF preview/export
+      - `paperview`: static HTML used for PDF preview/fallback
+      - `pdf`: native Quarto PDF via LaTeX
 
     Export outputs are named per-paper so preview builds do not overwrite them.
     """
@@ -76,6 +77,9 @@ def run_quarto_render(
         # Per-paper output name (profile no longer hardcodes output-file) so
         # compiling paperII doesn't overwrite paperI's paperview HTML.
         cmd += ["--output", f"{qmd_path.stem}-paperview.html"]
+    elif output_format == "pdf":
+        cmd = ["quarto", "render", str(qmd_path), "--to", "pdf"]
+        cmd += ["--output", f"{qmd_path.stem}.pdf"]
     else:
         cmd = ["quarto", "render", str(qmd_path), "--to", output_format]
 

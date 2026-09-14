@@ -18,8 +18,8 @@ except ImportError:
 
 _here = Path(__file__).resolve().parent.parent
 _project_root = Path(
-    os.environ.get("PROJECT_ROOT")
-    or os.environ.get("QUARTO_PROJECT_DIR")
+    os.environ.get("QUARTO_PROJECT_DIR")
+    or os.environ.get("PROJECT_ROOT")
     or str(_here.parent.parent)
 )
 

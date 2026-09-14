@@ -25,3 +25,18 @@ def test_asset_relay_matches_static_persistence_policy():
     assert "if (_CAN_PERSIST) return fetch(url, options);" in relay
     assert "_persist('/camera/'+camId" in relay
     assert "_persist('/field/'+figId2" in relay
+
+
+def test_pdf_inline_code_filter_registered():
+    extension = (ROOT / "_extensions" / "4dpaper" / "_extension.yml").read_text(
+        encoding="utf-8"
+    )
+    lua = (ROOT / "_extensions" / "4dpaper" / "breakable-code.lua").read_text(
+        encoding="utf-8"
+    )
+
+    assert "filters:" in extension
+    assert "- breakable-code.lua" in extension
+    assert 'FORMAT:match("latex")' in lua
+    assert "\\allowbreak{}" in lua
+    assert "\\texttt{" in lua

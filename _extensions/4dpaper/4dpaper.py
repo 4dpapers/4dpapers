@@ -50,7 +50,7 @@ if (
 
 from dashboard.document_signing import sign_html_file_if_configured
 sys.path.insert(0, str(_here.parent))
-from lib.parser import parse_graph_shortcodes, parse_panel_shortcodes, parse_shortcodes, parse_video_shortcodes, parse_multi_image_shortcodes, parse_timeseries_shortcodes
+from lib.parser import parse_graph_panel_shortcodes, parse_graph_shortcodes, parse_panel_shortcodes, parse_shortcodes, parse_video_shortcodes, parse_multi_image_shortcodes, parse_timeseries_shortcodes
 from lib.mesh import _rdp_simplify_xy, _get_overlay_at_time, _prepare_surface, _decimate_quadric, _surface_cell_count, _decimate_surface, _has_polygon_cells, _add_mesh_auto, _apply_decimation, _merge_overlay_mesh
 from lib.utils import is_cache_valid, resolve_src_path, _maybe_sign_output_html
 from lib.render import generate_multi_image_png, generate_png_figure, generate_panel_html, generate_multi_image_html, generate_panel_png, generate_video_figure, generate_html_figure
@@ -217,6 +217,86 @@ def _apply_saved_plotly_camera(fig, fig_id: str) -> bool:
     return True
 
 
+def _generate_plotly_graph_asset(
+    fig_id: str,
+    src: Path,
+    out_html: Path,
+    out_png: Path,
+    camera_path: Path,
+) -> None:
+    """Generate one Plotly graph HTML/PNG pair from a serialized figure JSON."""
+    import plotly.io as pio
+    import plotly.graph_objects as go
+
+    with open(src, "r") as f:
+        fig_dict = json.load(f)
+
+    # Apply RDP simplification to every trace that carries (x, y) arrays.
+    for trace in fig_dict.get("data", []):
+        xs = trace.get("x")
+        ys = trace.get("y")
+        if (isinstance(xs, list) and isinstance(ys, list)
+                and len(xs) == len(ys) and len(xs) > 2):
+            n_before = len(xs)
+            xs_s, ys_s = _rdp_simplify_xy(xs, ys)
+            n_after = len(xs_s)
+            if n_after < n_before:
+                trace["x"] = xs_s
+                trace["y"] = ys_s
+                pct = 100.0 * (1.0 - n_after / n_before)
+                tname = trace.get("name", "")
+                print(
+                    f"{fig_id} RDP{f' ({tname})' if tname else ''}: "
+                    f"{n_before:,} -> {n_after:,} points ({pct:.1f}% reduction)",
+                    file=sys.stderr,
+                )
+
+    fig = go.Figure(fig_dict)
+    graph_has_saved_camera = _apply_saved_plotly_camera(fig, fig_id)
+
+    fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+
+    try:
+        pio.write_image(fig, out_png, format="png", scale=2)
+    except Exception as e:
+        print(f"Warning: Could not export static PNG for plotly graph {fig_id}. (Kaleido issue). Error: {e}", file=sys.stderr)
+
+    # Let the iframe or grid cell control horizontal sizing.
+    fig.update_layout(autosize=True, width=None)
+
+    html_content = pio.to_html(
+        fig,
+        full_html=True,
+        include_plotlyjs="cdn",
+        config={'displayModeBar': False, 'responsive': True},
+    )
+    responsive_css = (
+        "<style id=\"fourd-plotly-responsive\">"
+        "html,body{margin:0;width:100%;height:100%;overflow:hidden;}"
+        ".plotly-graph-div{width:100%!important;height:100%!important;}"
+        "</style>"
+    )
+    if "</head>" in html_content:
+        html_content = html_content.replace("</head>", responsive_css + "\n</head>", 1)
+    else:
+        html_content = responsive_css + html_content
+
+    inj_html = _plotly_camera_sync_snippet(fig_id)
+    if graph_has_saved_camera:
+        print(f"Graph camera for {fig_id}: using saved camera for HTML/PDF export", file=sys.stderr)
+    elif camera_path.exists():
+        print(f"Graph camera for {fig_id}: saved file found but no 3D scene consumed it", file=sys.stderr)
+    else:
+        print(f"Graph camera for {fig_id}: not set", file=sys.stderr)
+    if '</body>' in html_content:
+        html_content = html_content.replace('</body>', inj_html + '\n</body>', 1)
+    else:
+        html_content += inj_html
+
+    out_html.write_text(html_content, encoding="utf-8")
+    _maybe_sign_output_html(out_html)
+
+
 
 
 
@@ -259,41 +339,50 @@ def main() -> None:
     # We always generate both .html and .png so both HTML and PDF output work.
     output_format = os.environ.get("QUARTO_OUTPUT_FORMAT", "html")  # kept for logging only
 
+    project_dir = Path(os.environ.get("QUARTO_PROJECT_DIR", str(_project_root)))
+
+    def collect_includes(qmd: Path, seen: set) -> list:
+        qmd = qmd.resolve()
+        if qmd in seen or not qmd.exists():
+            return []
+        seen.add(qmd)
+        result = [qmd]
+        for m in re.finditer(r'\{\{<\s*include\s+([^\s>]+)\s*>\}\}', qmd.read_text()):
+            child = (qmd.parent / m.group(1)).resolve()
+            result.extend(collect_includes(child, seen))
+        return result
+
     # QUARTO_DOCUMENT_PATH is not always set for project-level pre-render hooks.
-    # Fall back to following includes from main.qmd (or analysis_report.qmd).
-    if qmd_path and Path(qmd_path).exists():
-        qmd_files = [Path(qmd_path)]
+    # Follow include chains whenever possible; otherwise scan all top-level
+    # manuscript entry points and their includes.
+    if qmd_path:
+        root_qmd = Path(qmd_path)
+        if not root_qmd.is_absolute():
+            root_qmd = project_dir / root_qmd
+        qmd_files = collect_includes(root_qmd, set())
     else:
-        project_dir = Path(os.environ.get("QUARTO_PROJECT_DIR", str(_project_root)))
+        seen_qmds: set[Path] = set()
+        qmd_files = []
+        preferred_roots = [
+            project_dir / candidate
+            for candidate in ("main.qmd", "analysis_report.qmd")
+            if (project_dir / candidate).exists()
+        ]
+        root_qmds = preferred_roots or sorted(project_dir.glob("*.qmd"))
+        for root_qmd in root_qmds:
+            qmd_files.extend(collect_includes(root_qmd, seen_qmds))
 
-        def collect_includes(qmd: Path, seen: set) -> list:
-            if qmd in seen or not qmd.exists():
-                return []
-            seen.add(qmd)
-            result = [qmd]
-            for m in re.finditer(r'\{\{<\s*include\s+([^\s>]+)\s*>\}\}', qmd.read_text()):
-                child = (qmd.parent / m.group(1)).resolve()
-                result.extend(collect_includes(child, seen))
-            return result
-
-        for candidate in ["main.qmd", "analysis_report.qmd"]:
-            root_qmd = project_dir / candidate
-            if root_qmd.exists():
-                qmd_files = collect_includes(root_qmd, set())
-                break
-        else:
-            qmd_files = sorted(project_dir.glob("*.qmd"))
-
-        if not qmd_files:
-            print("No .qmd files found — skipping.", file=sys.stderr)
-            return
-        print(f"Scanning {len(qmd_files)} QMD file(s) in {project_dir}", file=sys.stderr)
+    if not qmd_files:
+        print("No .qmd files found — skipping.", file=sys.stderr)
+        return
+    print(f"Scanning {len(qmd_files)} QMD file(s) in {project_dir}", file=sys.stderr)
 
     figures = []
     videos = []
     panels = []
     ts_raw = []
     graphs = []
+    graph_panels = []
     multi_images = []
     for qmd in qmd_files:
         text = qmd.read_text()
@@ -303,9 +392,18 @@ def main() -> None:
         ts_raw.extend(parse_timeseries_shortcodes(text))
         multi_images.extend(parse_multi_image_shortcodes(text))
         graphs.extend(parse_graph_shortcodes(text))
+        graph_panels.extend(parse_graph_panel_shortcodes(text))
 
-    if not any([figures, videos, panels, ts_raw, graphs]):
-        print("No 4d-image, 4d-video, 4d-panel, 4d-timeseries, or 4d-graph shortcodes found.", file=sys.stderr)
+    seen_graph_ids = {graph["id"] for graph in graphs}
+    for panel in graph_panels:
+        for subgraph in panel["subfigures"]:
+            if subgraph["id"] in seen_graph_ids:
+                continue
+            graphs.append(subgraph)
+            seen_graph_ids.add(subgraph["id"])
+
+    if not any([figures, videos, panels, ts_raw, graphs, graph_panels]):
+        print("No 4d-image, 4d-video, 4d-panel, 4d-timeseries, 4d-graph, or 4d-graph-panel shortcodes found.", file=sys.stderr)
         return
 
     figures_dir = _project_root / "state" / "figures"
@@ -552,67 +650,7 @@ def main() -> None:
             
         print(f"Generating Graph figure for {fig_id} ({src}) ...", file=sys.stderr)
         try:
-            import plotly.io as pio
-            import plotly.graph_objects as go
-
-            with open(src, "r") as f:
-                fig_dict = json.load(f)
-
-            # Apply RDP simplification to every trace that carries (x, y) arrays.
-            for trace in fig_dict.get("data", []):
-                xs = trace.get("x")
-                ys = trace.get("y")
-                if (isinstance(xs, list) and isinstance(ys, list)
-                        and len(xs) == len(ys) and len(xs) > 2):
-                    n_before = len(xs)
-                    xs_s, ys_s = _rdp_simplify_xy(xs, ys)
-                    n_after = len(xs_s)
-                    if n_after < n_before:
-                        trace["x"] = xs_s
-                        trace["y"] = ys_s
-                        pct = 100.0 * (1.0 - n_after / n_before)
-                        tname = trace.get("name", "")
-                        print(
-                            f"{fig_id} RDP{f' ({tname})' if tname else ''}: "
-                            f"{n_before:,} → {n_after:,} points ({pct:.1f}% reduction)",
-                            file=sys.stderr,
-                        )
-
-            fig = go.Figure(fig_dict)
-            graph_has_saved_camera = _apply_saved_plotly_camera(fig, fig_id)
-            
-            # Re-theme the figure background so it matches the surrounding page neatly
-            fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-
-            # Export PNG for static PDF builds — keep original width for a crisp raster.
-            try:
-                pio.write_image(fig, out_png, format="png", scale=2)
-            except Exception as e:
-                print(f"Warning: Could not export static PNG for plotly graph {fig_id}. (Kaleido issue). Error: {e}", file=sys.stderr)
-
-            # Make the HTML figure responsive: strip the hardcoded width so it
-            # fills whatever iframe/column width the page gives it, and let
-            # Plotly reflow on resize via config responsive=True.
-            fig.update_layout(autosize=True, width=None)
-
-            # Export standalone HTML for interactive web
-            html_content = pio.to_html(fig, full_html=True, include_plotlyjs="cdn", config={'displayModeBar': False, 'responsive': True})
-            
-            # Plotly figures need their own camera relay because there is no vtk.js controls strip.
-            inj_html = _plotly_camera_sync_snippet(fig_id)
-            if graph_has_saved_camera:
-                print(f"Graph camera for {fig_id}: using saved camera for HTML/PDF export", file=sys.stderr)
-            elif camera_path.exists():
-                print(f"Graph camera for {fig_id}: saved file found but no 3D scene consumed it", file=sys.stderr)
-            else:
-                print(f"Graph camera for {fig_id}: not set", file=sys.stderr)
-            if '</body>' in html_content:
-                html_content = html_content.replace('</body>', inj_html + '\n</body>', 1)
-            else:
-                html_content += inj_html
-                
-            out_html.write_text(html_content, encoding="utf-8")
-            _maybe_sign_output_html(out_html)
+            _generate_plotly_graph_asset(fig_id, src, out_html, out_png, camera_path)
         except Exception as exc:
             print(f"ERROR generating Graph figure {fig_id}: {exc}", file=sys.stderr)
             sys.exit(1)

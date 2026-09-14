@@ -10,8 +10,8 @@ from pathlib import Path
 
 _here = Path(__file__).resolve()
 _project_root = Path(
-    os.environ.get("PROJECT_ROOT")
-    or os.environ.get("QUARTO_PROJECT_DIR")
+    os.environ.get("QUARTO_PROJECT_DIR")
+    or os.environ.get("PROJECT_ROOT")
     or str(Path.cwd())
 )
 

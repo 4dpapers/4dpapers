@@ -177,6 +177,40 @@ class TestRunQuartoRenderHtmlExport:
             run_quarto_render(qmd, [], output_format="html-export")
 
 
+class TestRunQuartoRenderPdf:
+    def test_pdf_uses_native_quarto_pdf_output(self, tmp_path):
+        from unittest.mock import patch, MagicMock
+        from dashboard.utils import run_quarto_render
+
+        qmd = tmp_path / "paper.qmd"
+        qmd.write_text("# Test\n")
+        captured = {}
+
+        def fake_popen(cmd, **kwargs):
+            captured["cmd"] = cmd
+            captured["env"] = kwargs.get("env", {})
+            proc = MagicMock()
+            proc.stdout.__iter__ = lambda s: iter([])
+            proc.wait.return_value = None
+            proc.returncode = 0
+            return proc
+
+        with patch("subprocess.Popen", fake_popen):
+            run_quarto_render(qmd, [], output_format="pdf")
+
+        assert captured["cmd"] == [
+            "quarto",
+            "render",
+            str(qmd),
+            "--to",
+            "pdf",
+            "--output",
+            "paper.pdf",
+        ]
+        assert "FOURD_PAPER_VIEW" not in captured["env"]
+        assert "FOURD_APP_MODE" not in captured["env"]
+
+
 class TestMaybeSignRenderedHtml:
     def test_appends_log_when_signing_occurs(self, tmp_path):
         from unittest.mock import patch

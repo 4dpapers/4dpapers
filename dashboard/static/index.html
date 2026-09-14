@@ -1907,7 +1907,7 @@
         }
     });
 
-    // Export dropdown — Export to PDF (paperview + print) or Export to HTML (templated download)
+    // Export dropdown — Export to PDF (native Quarto PDF) or Export to HTML (templated download)
     (function () {
         const wrap = document.querySelector('[data-purpose="export-wrap"]');
         const btn = document.querySelector('[data-purpose="export-button"]');
@@ -1952,7 +1952,7 @@
 
             try {
                 if (fmt === 'pdf') {
-                    // ── PDF export (unchanged) ─────────────────────────────
+                    // ── PDF export ────────────────────────────────────────
                     const response = await fetch('/api/export', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -1964,14 +1964,25 @@
                         })
                     });
                     if (!response.ok) {
-                        const err = await response.json().catch(() => ({error: 'Export failed with status ' + response.status}));
-                        buildProgress.finish(false);
-                        logTitle.style.color = '#ef4444';
-                        logTitle.textContent = 'Build Log — PDF Export Failed';
+                        const err = await response.json();
+                        clearInterval(logInterval);
                         logOutput.textContent = formatBuildLogDisplay(err.log || err.error || 'PDF export failed', exportContext);
                         setBuildLogPanelVisible(true);
                         setStatusBarState('PDF export failed', '#ef4444', 'ph-fill ph-x-circle');
-                        alert('Export failed:\n\n' + (err.error || 'Unknown error'));
+                        
+                        const previewIframe = document.getElementById('preview-iframe');
+                        if (previewIframe) {
+                            previewIframe.srcdoc = `
+                                <div style="display:flex; justify-content:center; align-items:center; height:100%; font-family:sans-serif; color:#ef4444; background:#fef2f2; text-align:center; padding: 20px;">
+                                    <div>
+                                        <h2 style="margin-top:0;">Export Failed</h2>
+                                        <p>${err.error || 'Unknown error'}</p>
+                                        <p style="font-size: 0.9em; color: #7f1d1d; margin-top: 10px;">Check the build logs for more details.</p>
+                                    </div>
+                                </div>
+                            `;
+                        }
+                        
                         return;
                     }
                     const blob = await response.blob();
@@ -2004,14 +2015,25 @@
                     });
 
                     if (!response.ok) {
-                        const err = await response.json().catch(() => ({error: 'Export failed with status ' + response.status}));
-                        buildProgress.finish(false);
-                        logTitle.style.color = '#ef4444';
-                        logTitle.textContent = 'Build Log — HTML Export Failed';
+                        const err = await response.json();
+                        clearInterval(logInterval);
                         logOutput.textContent = formatBuildLogDisplay(err.log || err.error || 'HTML export failed', exportContext);
                         setBuildLogPanelVisible(true);
                         setStatusBarState('HTML export failed', '#ef4444', 'ph-fill ph-x-circle');
-                        alert('Export failed:\n\n' + (err.error || 'Unknown error'));
+                        
+                        const previewIframe = document.getElementById('preview-iframe');
+                        if (previewIframe) {
+                            previewIframe.srcdoc = `
+                                <div style="display:flex; justify-content:center; align-items:center; height:100%; font-family:sans-serif; color:#ef4444; background:#fef2f2; text-align:center; padding: 20px;">
+                                    <div>
+                                        <h2 style="margin-top:0;">Export Failed</h2>
+                                        <p>${err.error || 'Unknown error'}</p>
+                                        <p style="font-size: 0.9em; color: #7f1d1d; margin-top: 10px;">Check the build logs for more details.</p>
+                                    </div>
+                                </div>
+                            `;
+                        }
+                        
                         return;
                     }
 
@@ -2034,13 +2056,22 @@
                     setStatusBarState('HTML export ready (' + (tmpl.preset || 'academic') + ' template)', '#22c55e', 'ph-fill ph-check-circle');
                 }
             } catch (error) {
-                buildProgress.finish(false);
-                logTitle.style.color = '#ef4444';
-                logTitle.textContent = fmt === 'pdf' ? 'Build Log — PDF Export Failed' : 'Build Log — HTML Export Failed';
+                console.error('Export error:', error);
                 logOutput.textContent = formatBuildLogDisplay(error.message || 'Export failed', exportContext);
                 setBuildLogPanelVisible(true);
                 setStatusBarState(fmt === 'pdf' ? 'PDF export failed' : 'HTML export failed', '#ef4444', 'ph-fill ph-x-circle');
-                alert('Export failed: ' + error.message);
+                
+                const previewIframe = document.getElementById('preview-iframe');
+                if (previewIframe) {
+                    previewIframe.srcdoc = `
+                        <div style="display:flex; justify-content:center; align-items:center; height:100%; font-family:sans-serif; color:#ef4444; background:#fef2f2; text-align:center; padding: 20px;">
+                            <div>
+                                <h2 style="margin-top:0;">Export Failed</h2>
+                                <p>${error.message || 'Unknown error'}</p>
+                            </div>
+                        </div>
+                    `;
+                }
             } finally {
                 clearInterval(logInterval);
                 btn.disabled = false;

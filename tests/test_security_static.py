@@ -4,6 +4,10 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
+import pytest
+
+pytest.importorskip("tornado")
+
 import tornado.web
 from tornado.testing import AsyncHTTPTestCase
 
@@ -69,6 +73,12 @@ class SecurityRouteTest(AsyncHTTPTestCase):
         ok = self._get("/output/paper.html")
         assert ok.code == 200
         assert b"paper" in ok.body
+
+    def test_output_static_route_disables_browser_cache(self):
+        ok = self._get("/output/paper.html")
+        assert ok.code == 200
+        assert ok.headers["Cache-Control"] == "no-store, no-cache, must-revalidate, max-age=0"
+        assert ok.headers["Pragma"] == "no-cache"
 
     def test_state_figures_require_api_key_when_auth_enabled(self):
         assert self._get("/state/figures/fig.html", key=False).code == 401
