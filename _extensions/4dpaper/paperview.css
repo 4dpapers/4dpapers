@@ -116,13 +116,17 @@ figure, .fourd-figure {
   margin: 2.5rem 0 !important;
   text-align: center !important;
   width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  overflow-x: hidden !important;
 }
 
-figure img, .fourd-figure img {
+figure img, .fourd-figure img, img.figure-img {
   max-width: 100% !important;
   height: auto !important;
   display: block !important;
   margin: 0 auto !important;
+  box-sizing: border-box !important;
 }
 
 figcaption, .fourd-figure figcaption {
@@ -131,6 +135,27 @@ figcaption, .fourd-figure figcaption {
   margin-top: 1rem !important;
   color: #333 !important;
   text-align: center !important;
+}
+
+.fourd-subfigure-grid {
+  max-width: 100% !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
+}
+
+.fourd-subfigure {
+  min-width: 0 !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.fourd-subcaption {
+  margin-top: 0.35rem !important;
+  font-size: 9.5pt !important;
+  line-height: 1.25 !important;
+  text-align: center !important;
+  font-style: italic !important;
 }
 
 /* Equations */
@@ -161,4 +186,34 @@ th {
 /* Clean up paragraph spacing */
 p {
   margin-bottom: 1rem !important;
+}
+
+@media print {
+  @page {
+    margin: 2.5cm;
+    size: A4 portrait;
+  }
+
+  body, main.content {
+    max-width: none !important;
+    width: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: transparent !important;
+  }
+
+  figure, .fourd-figure, .fourd-subfigure-grid, tr, img {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  h1, h2, h3, h4, h5, caption, figcaption {
+    page-break-after: avoid !important;
+    break-after: avoid !important;
+  }
+
+  h1, h2 {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
 }

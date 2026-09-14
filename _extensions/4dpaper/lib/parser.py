@@ -128,6 +128,42 @@ def parse_graph_shortcodes(text: str) -> list[dict]:
         results.append(kwargs)
     return results
 
+def parse_graph_panel_shortcodes(text: str) -> list[dict]:
+    """Parse `4d-graph-panel` shortcodes from QMD text.
+
+    Each panel cell is a separate Plotly JSON source.  That keeps subplot
+    layout, axes, legends and browser cache keys independent per subfigure.
+    """
+    stripped = re.sub(r'```.*?```', '', text, flags=re.DOTALL)
+    pattern = r'\{\{<\s*4d-graph-panel\s+(.*?)\s*>\}\}'
+    results = []
+    for match in re.finditer(pattern, stripped, re.DOTALL):
+        raw = match.group(1)
+        kwargs: dict[str, str] = {}
+        for key, val in re.findall(r'(\w+)\s*=\s*["\'](.*?)["\']', raw):
+            kwargs[key] = val
+        if "id" not in kwargs:
+            continue
+        subfigures = []
+        n = 1
+        while f"src{n}" in kwargs:
+            subfigures.append({
+                "src": kwargs[f"src{n}"],
+                "id": kwargs.get(f"id{n}", f"{kwargs['id']}-{n}"),
+                "caption": kwargs.get(f"cap{n}", ""),
+            })
+            n += 1
+        if not subfigures:
+            continue
+        results.append({
+            "id": kwargs["id"],
+            "layout": kwargs.get("layout", f"{len(subfigures)}x1"),
+            "height": kwargs.get("height", ""),
+            "caption": kwargs.get("caption", ""),
+            "subfigures": subfigures,
+        })
+    return results
+
 def parse_multi_image_shortcodes(text: str) -> list[dict]:
     """Parse ``4d-multi-image`` shortcodes from QMD text.
 
@@ -150,4 +186,3 @@ def parse_multi_image_shortcodes(text: str) -> list[dict]:
         kwargs.setdefault("caption", "")
         results.append(kwargs)
     return results
-

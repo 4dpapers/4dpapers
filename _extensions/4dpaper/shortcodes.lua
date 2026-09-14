@@ -328,6 +328,158 @@ local function _shared_relay_script_once()
   return _RELAY_SCRIPT
 end
 
+local function _valid_css_length(value)
+  if value == nil or value == "" then
+    return false
+  end
+  return value:match("^%d+%.?%d*px$") or
+         value:match("^%d+%.?%d*rem$") or
+         value:match("^%d+%.?%d*em$") or
+         value:match("^%d+%.?%d*vh$") or
+         value:match("^%d+%.?%d*%%$")
+end
+
+local function _figure_html_height(id, default_height)
+  local fig_path = "state/figures/" .. id .. ".html"
+  local fh = io.open(fig_path, "r")
+  if not fh then
+    return default_height
+  end
+  local html = fh:read("*all")
+  fh:close()
+
+  local px = html:match("height:%s*(%d+%.?%d*)px")
+  if px then
+    return px .. "px"
+  end
+
+  return default_height
+end
+
+local function _iframe_height(id, requested_height, default_height)
+  if _valid_css_length(requested_height) then
+    return requested_height
+  end
+  return _figure_html_height(id, default_height or "600px")
+end
+
+local function _file_version(path)
+  local fh = io.open(path, "rb")
+  if not fh then
+    return "missing"
+  end
+  local data = fh:read("*all")
+  fh:close()
+  local sum = 0
+  for i = 1, #data do
+    sum = (sum + data:byte(i) * i) % 4294967291
+  end
+  return string.format("%x-%x", #data, sum)
+end
+
+local function _state_figure_url(id, suffix)
+  suffix = suffix or ".html"
+  local path = "state/figures/" .. id .. suffix
+  return "/state/figures/" .. id .. suffix .. "?v=" .. _file_version(path)
+end
+
+local function _html_escape(value)
+  value = tostring(value or "")
+  value = value:gsub("&", "&amp;")
+  value = value:gsub("<", "&lt;")
+  value = value:gsub(">", "&gt;")
+  return value
+end
+
+local function _attr_escape(value)
+  value = _html_escape(value)
+  value = value:gsub('"', "&quot;")
+  return value
+end
+
+local function _latex_escape(value)
+  value = tostring(value or "")
+  value = value:gsub("\\", "\\textbackslash{}")
+  value = value:gsub("([&%%$#_{}])", {
+    ["&"] = "\\&",
+    ["%"] = "\\%",
+    ["$"] = "\\$",
+    ["#"] = "\\#",
+    ["_"] = "\\_",
+    ["{"] = "\\{",
+    ["}"] = "\\}",
+  })
+  value = value:gsub("~", "\\textasciitilde{}")
+  value = value:gsub("%^", "\\textasciicircum{}")
+  return value
+end
+
+local function _asset_url(path)
+  path = tostring(path or "")
+  if path == "" or path:match("^https?://") or path:match("^data:") or path:match("%?") then
+    return _attr_escape(path)
+  end
+  return _attr_escape(path .. "?v=" .. _file_version(path))
+end
+
+local function _numbered_items(kwargs)
+  local items = {}
+  local n = 1
+  while true do
+    local src_val = kwargs["src" .. n]
+    if not src_val then break end
+    local src = pandoc.utils.stringify(src_val)
+    if src == "" then break end
+    local id = pandoc.utils.stringify(kwargs["id" .. n] or pandoc.Str(""))
+    local cap = pandoc.utils.stringify(kwargs["cap" .. n] or pandoc.Str(""))
+    local alt = pandoc.utils.stringify(kwargs["alt" .. n] or pandoc.Str(""))
+    table.insert(items, { src = src, id = id, caption = cap, alt = alt })
+    n = n + 1
+  end
+  return items
+end
+
+local function _grid_columns(count, layout, ncols)
+  local cols = tonumber(ncols)
+  if not cols and layout then
+    cols = tonumber(tostring(layout):match("^(%d+)x"))
+  end
+  cols = cols or count
+  if cols < 1 then cols = 1 end
+  if count > 0 and cols > count then cols = count end
+  return cols
+end
+
+local function _grid_rows(count, cols, layout)
+  local rows = nil
+  if layout then
+    rows = tonumber(tostring(layout):match("x(%d+)$"))
+  end
+  if rows then return rows end
+  return math.ceil(count / math.max(1, cols))
+end
+
+local function _subfigure_grid_html(items, cols, gap, cell_html_fn, rows, fill_height)
+  gap = gap ~= "" and gap or "8px"
+  local height_css = fill_height and "height:100%;" or ""
+  local rows_css = rows and ("grid-template-rows:repeat(" .. rows .. ",minmax(0,1fr));") or ""
+  local cells = {}
+  for i, item in ipairs(items) do
+    local cell = cell_html_fn(item, i)
+    local cap = item.caption ~= "" and
+      '<div class="fourd-subcaption">' .. _html_escape(item.caption) .. '</div>' or ""
+    table.insert(cells,
+      '<div class="fourd-subfigure" style="min-width:0;max-width:100%;overflow:hidden;' ..
+      height_css .. (fill_height and "display:flex;flex-direction:column;" or "") .. '">' ..
+      cell .. cap .. '</div>')
+  end
+  return '<div class="fourd-subfigure-grid" style="' ..
+    'display:grid;grid-template-columns:repeat(' .. cols .. ',minmax(0,1fr));' ..
+    rows_css ..
+    'gap:' .. _attr_escape(gap) .. ';width:100%;max-width:100%;box-sizing:border-box;' ..
+    'overflow:hidden;align-items:start;' .. height_css .. '">' .. table.concat(cells, "\n") .. '</div>'
+end
+
 local function _build_sync_iframe_panel(id, caption, height, ncols, nrows, subfig_ids, show_transport, time_indices)
   if #subfig_ids == 0 then
     return nil
@@ -342,7 +494,7 @@ local function _build_sync_iframe_panel(id, caption, height, ncols, nrows, subfi
     if exists then
       local cell_iframe
       if _app_mode then
-        cell_iframe = '<iframe src="/state/figures/' .. sub_id .. '.html" ' ..
+        cell_iframe = '<iframe src="' .. _state_figure_url(sub_id, ".html") .. '" ' ..
                       'data-panel="' .. id .. '" ' ..
                       'style="width:100%;height:100%;border:none;" frameborder="0"></iframe>'
       else
@@ -383,6 +535,7 @@ end
 local function fourd_image(args, kwargs)
   local id      = pandoc.utils.stringify(kwargs["id"] or pandoc.Str(""))
   local caption = pandoc.utils.stringify(kwargs["caption"] or pandoc.Str(""))
+  local height  = pandoc.utils.stringify(kwargs["height"] or pandoc.Str(""))
 
   if id == "" then
     return pandoc.RawBlock("html",
@@ -433,14 +586,15 @@ local function fourd_image(args, kwargs)
     end
 
     local iframe
+    local iframe_height = _iframe_height(id, height, "600px")
     if _app_mode then
       -- App mode: reference static file — pandoc doesn't inline the content.
-      iframe = '<iframe src="/state/figures/' .. id .. '.html" width="100%" height="600px" ' ..
+      iframe = '<iframe src="' .. _state_figure_url(id, ".html") .. '" width="100%" height="' .. iframe_height .. '" ' ..
                'frameborder="0" style="border:none;border-radius:4px;display:block;"></iframe>'
     else
       -- Export mode: output a placeholder for the Python post-processor to inject the massive Base64 strings.
       -- This bypasses Pandoc's extremely slow embed-resources step.
-      iframe = '<iframe data-fourd-inject="state/figures/' .. id .. '.html" width="100%" height="600px" ' ..
+      iframe = '<iframe data-fourd-inject="state/figures/' .. id .. '.html" width="100%" height="' .. iframe_height .. '" ' ..
                'frameborder="0" style="border:none;border-radius:4px;display:block;"></iframe>'
     end
 
@@ -482,6 +636,7 @@ end
 local function fourd_video(args, kwargs)
   local id      = pandoc.utils.stringify(kwargs["id"]      or pandoc.Str(""))
   local caption = pandoc.utils.stringify(kwargs["caption"] or pandoc.Str(""))
+  local height  = pandoc.utils.stringify(kwargs["height"] or pandoc.Str(""))
 
   if id == "" then
     return pandoc.RawBlock("html",
@@ -551,8 +706,9 @@ local function fourd_video(args, kwargs)
       -- Use JS to set iframe src with Date.now() so the browser never serves
       -- a cached version of the video HTML after a rebuild.
       local iframe_id = 'fourd-vid-' .. id
+      local iframe_height = _iframe_height(id .. "-video", height, "600px")
       body = '<div style="position:relative;display:inline-block;width:100%;">' ..
-             '<iframe id="' .. iframe_id .. '" src="" width="100%" height="600px" ' ..
+             '<iframe id="' .. iframe_id .. '" src="" width="100%" height="' .. iframe_height .. '" ' ..
              'frameborder="0" style="border:none;border-radius:4px;display:block;"></iframe>' ..
              '<script>(function(){' ..
              'var f=document.getElementById("' .. iframe_id .. '");' ..
@@ -709,7 +865,7 @@ local function fourd_panel(args, kwargs)
       if exists then
         local cell_iframe
         if _app_mode then
-          cell_iframe = '<iframe src="/state/figures/' .. sub_id .. '.html" ' ..
+          cell_iframe = '<iframe src="' .. _state_figure_url(sub_id, ".html") .. '" ' ..
                         'style="width:100%;height:100%;border:none;" frameborder="0"></iframe>'
         else
           cell_iframe = '<iframe data-fourd-inject="state/figures/' .. sub_id .. '.html" ' ..
@@ -812,7 +968,7 @@ local function fourd_panel(args, kwargs)
       end
     end
     if caption ~= "" then
-      table.insert(lines, "\n\\caption{" .. caption .. "}\n")
+      table.insert(lines, "\n\\caption{" .. _latex_escape(caption) .. "}\n")
     end
     table.insert(lines, "\\end{figure}\n")
     return pandoc.RawBlock("latex", table.concat(lines))
@@ -822,6 +978,7 @@ end
 local function fourd_pvsm(args, kwargs)
   local id      = pandoc.utils.stringify(kwargs["id"]      or pandoc.Str(""))
   local caption = pandoc.utils.stringify(kwargs["caption"] or pandoc.Str(""))
+  local height  = pandoc.utils.stringify(kwargs["height"] or pandoc.Str(""))
 
   if id == "" then
     return pandoc.RawBlock("html",
@@ -890,8 +1047,9 @@ local function fourd_pvsm(args, kwargs)
         "if(o)o.style.display='flex';" ..
         "})()"
       local iframe_id = 'fourd-pvsm-' .. id
+      local iframe_height = _iframe_height(id, height, "600px")
       body = '<div style="position:relative;display:inline-block;width:100%;">' ..
-             '<iframe id="' .. iframe_id .. '" src="" width="100%" height="600px" ' ..
+             '<iframe id="' .. iframe_id .. '" src="" width="100%" height="' .. iframe_height .. '" ' ..
              'frameborder="0" style="border:none;border-radius:4px;display:block;"></iframe>' ..
              '<script>(function(){' ..
              'var f=document.getElementById("' .. iframe_id .. '");' ..
@@ -904,7 +1062,8 @@ local function fourd_pvsm(args, kwargs)
              '</div>'
     else
       -- Export mode: output a placeholder for Python injection
-      body = '<iframe data-fourd-inject="state/figures/' .. id .. '.html" width="100%" height="600px" ' ..
+      local iframe_height = _iframe_height(id, height, "600px")
+      body = '<iframe data-fourd-inject="state/figures/' .. id .. '.html" width="100%" height="' .. iframe_height .. '" ' ..
              'frameborder="0" style="border:none;border-radius:4px;display:block;"></iframe>'
     end
 
@@ -1086,7 +1245,7 @@ local function fourd_timeseries(args, kwargs)
       end
     end
     if caption ~= "" then
-      table.insert(lines, "\n\\caption{" .. caption .. "}\n")
+      table.insert(lines, "\n\\caption{" .. _latex_escape(caption) .. "}\n")
     end
     table.insert(lines, "\\end{figure}\n")
     return pandoc.RawBlock("latex", table.concat(lines))
@@ -1096,6 +1255,7 @@ end
 local function fourd_graph(args, kwargs)
   local id      = pandoc.utils.stringify(kwargs["id"]      or pandoc.Str(""))
   local caption = pandoc.utils.stringify(kwargs["caption"] or pandoc.Str(""))
+  local height  = pandoc.utils.stringify(kwargs["height"] or pandoc.Str(""))
 
   if id == "" then
     return pandoc.RawBlock("html",
@@ -1143,11 +1303,12 @@ local function fourd_graph(args, kwargs)
       or ""
 
     local body
+    local iframe_height = _iframe_height(id, height, "600px")
     if _app_mode then
-      body = '<iframe src="/state/figures/' .. id .. '.html" width="100%" height="600px" ' ..
+      body = '<iframe src="' .. _state_figure_url(id, ".html") .. '" width="100%" height="' .. iframe_height .. '" ' ..
              'frameborder="0" style="border:none;border-radius:4px;display:block;"></iframe>'
     else
-      body = '<iframe data-fourd-inject="state/figures/' .. id .. '.html" width="100%" height="600px" ' ..
+      body = '<iframe data-fourd-inject="state/figures/' .. id .. '.html" width="100%" height="' .. iframe_height .. '" ' ..
              'frameborder="0" style="border:none;border-radius:4px;display:block;"></iframe>'
     end
 
@@ -1194,9 +1355,179 @@ end
 -- From Lua's perspective the output is identical to 4d-image — just embed it.
 local fourd_multi_image = fourd_image
 
+local function fourd_subimages(args, kwargs)
+  local id      = pandoc.utils.stringify(kwargs["id"]      or pandoc.Str(""))
+  local caption = pandoc.utils.stringify(kwargs["caption"] or pandoc.Str(""))
+  local layout  = pandoc.utils.stringify(kwargs["layout"]  or pandoc.Str(""))
+  local ncols   = pandoc.utils.stringify(kwargs["ncols"]   or pandoc.Str(""))
+  local gap     = pandoc.utils.stringify(kwargs["gap"]     or pandoc.Str("8px"))
+  local items = _numbered_items(kwargs)
+
+  if #items == 0 then
+    return pandoc.RawBlock("html",
+      '<div style="border:2px dashed #888;padding:1rem;text-align:center;">' ..
+      '4d-subimages: provide src1, src2, ...</div>')
+  end
+
+  local cols = _grid_columns(#items, layout, ncols)
+
+  if quarto.doc.isFormat("html") then
+    local grid = _subfigure_grid_html(items, cols, gap, function(item)
+      local alt = item.alt ~= "" and item.alt or item.caption
+      local src = _paper_view and _attr_escape(item.src) or _asset_url(item.src)
+      return '<img src="' .. src .. '" alt="' .. _attr_escape(alt) .. '" ' ..
+        'style="display:block;width:100%;max-width:100%;height:auto;box-sizing:border-box;">'
+    end)
+    local cap_html = caption ~= "" and
+      '<figcaption style="text-align:center;font-style:italic;margin-top:0.5rem;">' ..
+      _html_escape(caption) .. '</figcaption>\n' or ""
+    local fig_id = id ~= "" and ' id="' .. _attr_escape(id) .. '"' or ""
+    return pandoc.RawBlock("html",
+      '<figure' .. fig_id .. ' class="fourd-figure fourd-subimages" ' ..
+      'style="margin:1.5rem 0;max-width:100%;overflow:hidden;box-sizing:border-box;">\n' ..
+      grid .. '\n' .. cap_html .. '</figure>\n')
+  else
+    local lines = {}
+    if caption ~= "" then
+      table.insert(lines, "\\begin{figure}[h]\n\\centering\n")
+    end
+    local mp_width = string.format("%.3f", 0.98 / cols)
+    for i, item in ipairs(items) do
+      table.insert(lines, "\\begin{minipage}{" .. mp_width .. "\\textwidth}\n")
+      table.insert(lines, "  \\centering\n")
+      table.insert(lines, "  \\includegraphics[width=\\linewidth]{" .. item.src .. "}\n")
+      if item.caption ~= "" then
+        table.insert(lines, "  {\\footnotesize " .. _latex_escape(item.caption) .. "}\\par\n")
+      end
+      table.insert(lines, "\\end{minipage}")
+      local col_pos = (i - 1) % cols + 1
+      if i < #items then
+        if col_pos == cols then
+          table.insert(lines, "\\\\[0.5em]\n")
+        else
+          table.insert(lines, "\\hfill\n")
+        end
+      end
+    end
+    if caption ~= "" then
+      table.insert(lines, "\n\\caption{" .. _latex_escape(caption) .. "}\n")
+      if id ~= "" then
+        table.insert(lines, "\\label{" .. id .. "}\n")
+      end
+      table.insert(lines, "\\end{figure}\n")
+    end
+    return pandoc.RawBlock("latex", table.concat(lines))
+  end
+end
+
+local function fourd_graph_panel(args, kwargs)
+  local id      = pandoc.utils.stringify(kwargs["id"]      or pandoc.Str(""))
+  local caption = pandoc.utils.stringify(kwargs["caption"] or pandoc.Str(""))
+  local layout  = pandoc.utils.stringify(kwargs["layout"]  or pandoc.Str(""))
+  local ncols   = pandoc.utils.stringify(kwargs["ncols"]   or pandoc.Str(""))
+  local height  = pandoc.utils.stringify(kwargs["height"]  or pandoc.Str(""))
+  local gap     = pandoc.utils.stringify(kwargs["gap"]     or pandoc.Str("8px"))
+  local items = _numbered_items(kwargs)
+
+  if id == "" then
+    return pandoc.RawBlock("html",
+      '<div style="color:red">4d-graph-panel: missing required attribute <code>id</code></div>')
+  end
+  if #items == 0 then
+    return pandoc.RawBlock("html",
+      '<div style="border:2px dashed #888;padding:1rem;text-align:center;">' ..
+      '4d-graph-panel: provide src1/id1, src2/id2, ...</div>')
+  end
+  for i, item in ipairs(items) do
+    if item.id == "" then
+      item.id = id .. "-" .. i
+    end
+  end
+
+  local cols = _grid_columns(#items, layout, ncols)
+  local rows = _grid_rows(#items, cols, layout)
+  local panel_height = _valid_css_length(height) and height or tostring(rows * 450) .. "px"
+
+  if quarto.doc.isFormat("html") then
+    local cap_html = caption ~= "" and
+      '<figcaption style="text-align:center;font-style:italic;margin-top:0.5rem;">' ..
+      _html_escape(caption) .. '</figcaption>\n' or ""
+    local body
+    if _paper_view then
+      body = _subfigure_grid_html(items, cols, gap, function(item)
+        return '<img src="/state/figures/' .. _attr_escape(item.id) .. '.png" alt="' ..
+          _attr_escape(item.alt ~= "" and item.alt or item.caption) .. '" ' ..
+          'style="display:block;width:100%;max-width:100%;height:auto;box-sizing:border-box;">'
+      end)
+    else
+      body = _subfigure_grid_html(items, cols, gap, function(item)
+        local exists = io.open("state/figures/" .. item.id .. ".html", "r")
+        if exists then exists:close() end
+        if not exists then
+          return '<div style="height:100%;min-height:220px;display:flex;align-items:center;' ..
+            'justify-content:center;border:2px dashed #888;color:#666;">' ..
+            _html_escape(item.id) .. ' not rendered</div>'
+        end
+        if _app_mode then
+          return '<iframe src="' .. _state_figure_url(item.id, ".html") .. '" ' ..
+            'style="display:block;width:100%;height:100%;flex:1;min-height:0;border:none;border-radius:4px;box-sizing:border-box;" ' ..
+            'frameborder="0"></iframe>'
+        end
+        return '<iframe data-fourd-inject="state/figures/' .. _attr_escape(item.id) .. '.html" ' ..
+          'style="display:block;width:100%;height:100%;flex:1;min-height:0;border:none;border-radius:4px;box-sizing:border-box;" ' ..
+          'frameborder="0"></iframe>'
+      end, rows, true)
+      body = '<div style="width:100%;max-width:100%;height:' .. _attr_escape(panel_height) ..
+        ';overflow:hidden;box-sizing:border-box;">' .. body .. '</div>'
+    end
+
+    return pandoc.RawBlock("html",
+      _shared_relay_script_once() ..
+      '<figure id="' .. _attr_escape(id) .. '" class="fourd-figure fourd-graph-panel" ' ..
+      'style="margin:1.5rem 0;max-width:100%;overflow:hidden;box-sizing:border-box;">\n' ..
+      body .. '\n' .. cap_html .. '</figure>\n')
+  else
+    local lines = {}
+    if caption ~= "" then
+      table.insert(lines, "\\begin{figure}[h]\n\\centering\n")
+    end
+    local mp_width = string.format("%.3f", 0.98 / cols)
+    for i, item in ipairs(items) do
+      local pdf_path = "state/figures/" .. item.id .. ".pdf"
+      local png_path = "state/figures/" .. item.id .. ".png"
+      local pf = io.open(pdf_path, "r")
+      local fig_src
+      if pf then pf:close(); fig_src = pdf_path else fig_src = png_path end
+      table.insert(lines, "\\begin{minipage}{" .. mp_width .. "\\textwidth}\n")
+      table.insert(lines, "  \\centering\n")
+      table.insert(lines, "  \\includegraphics[width=\\linewidth]{" .. fig_src .. "}\n")
+      if item.caption ~= "" then
+        table.insert(lines, "  {\\footnotesize " .. _latex_escape(item.caption) .. "}\\par\n")
+      end
+      table.insert(lines, "\\end{minipage}")
+      local col_pos = (i - 1) % cols + 1
+      if i < #items then
+        if col_pos == cols then
+          table.insert(lines, "\\\\[0.5em]\n")
+        else
+          table.insert(lines, "\\hfill\n")
+        end
+      end
+    end
+    if caption ~= "" then
+      table.insert(lines, "\n\\caption{" .. _latex_escape(caption) .. "}\n")
+      table.insert(lines, "\\label{" .. id .. "}\n")
+      table.insert(lines, "\\end{figure}\n")
+    end
+    return pandoc.RawBlock("latex", table.concat(lines))
+  end
+end
+
 return {
   ["4d-image"]       = fourd_image,
   ["4d-multi-image"] = fourd_multi_image,
+  ["4d-subimages"]   = fourd_subimages,
+  ["4d-graph-panel"] = fourd_graph_panel,
   ["4d-video"]       = fourd_video,
   ["4d-panel"]       = fourd_panel,
   ["4d-pvsm"]        = fourd_pvsm,
