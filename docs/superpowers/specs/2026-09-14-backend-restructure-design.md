@@ -2,7 +2,7 @@
 
 Date: 2026-09-14
 Status: Approved for planning
-Releases: v1.1 → v1.2 → v1.3 → v2
+Releases: v1.0.3 → v1.1 → v1.2 → v1.3 → v2
 
 ## 1. Goal
 
