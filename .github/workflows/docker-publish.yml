@@ -45,9 +45,17 @@ jobs:
       - name: Install headless OpenGL stack
         run: |
           sudo apt-get update
+          # lua5.4: tests/test_extension.py executes the project's real Lua
+          # grid helpers rather than reimplementing them in Python.
           sudo apt-get install -y --no-install-recommends \
             libgl1 libglx-mesa0 libgl1-mesa-dri libglu1-mesa libosmesa6 \
-            libxrender1 libxext6 xvfb
+            libxrender1 libxext6 xvfb lua5.4
+
+      - name: Install Quarto
+        # The real compile/export tests (tests/test_export_pipeline.py) shell out
+        # to `quarto render`; without Quarto on PATH they skip, which would make
+        # the release gate weaker than the PR gate.
+        uses: quarto-dev/quarto-actions/setup@v2
 
       - name: Install dependencies
         run: |
