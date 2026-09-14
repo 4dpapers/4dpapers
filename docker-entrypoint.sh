@@ -96,7 +96,10 @@ project:
     - _extensions/4dpaper/4dpaper.py
   post-render:
     - _extensions/4dpaper/inject_figures.py
+    - _extensions/4dpaper/cache_bust_assets.py
     - _extensions/4dpaper/sign_rendered_html.py
+filters:
+  - _extensions/4dpaper/breakable-code.lua
 EOF
 
     # Create references.bib
@@ -193,7 +196,10 @@ project:
     - _extensions/4dpaper/4dpaper.py
   post-render:
     - _extensions/4dpaper/inject_figures.py
+    - _extensions/4dpaper/cache_bust_assets.py
     - _extensions/4dpaper/sign_rendered_html.py
+filters:
+  - _extensions/4dpaper/breakable-code.lua
 EOF
     echo -e "${GREEN}✓ Created _quarto.yml${NC}"
 fi
