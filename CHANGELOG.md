@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.4 — 2026-09-15
+
+Patch release. Fixes a defect in 0.1.3 that could put placeholder text into a
+published paper.
+
+### Fixed
+
+- Abort a PDF render when a figure cannot be generated. `run_quarto_render`
+  armed `FOURD_STRICT_STATIC_EXPORT` for the paperview profile but not for
+  native PDF, so a failed figure only produced a warning and the render
+  continued. The LaTeX branch of `shortcodes.lua` then emitted
+  `[Figure <id> — run 'Export PDF' ...]` as body text, and nothing on the PDF
+  path checks `_PLACEHOLDER_MARKERS` — so the export succeeded with that
+  sentence printed where the figure belonged.
+
 ## 0.1.3 — 2026-09-15
 
 Feature release: native LaTeX PDF export, two grid shortcodes, live file sync,
