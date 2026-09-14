@@ -12,6 +12,7 @@ Usage (from template_plugin.py):
 """
 from __future__ import annotations
 
+import html as _html
 import re
 from typing import Optional
 
@@ -27,7 +28,6 @@ TEMPLATES: dict[str, str] = {
     # closely, but lets users select it explicitly as a named preset.
     "academic": """\
 /* 4Dpapers Export Template: Academic */
-@import url('https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;1,400&display=swap');
 body {
   max-width: 800px !important;
   margin: 0 auto !important;
@@ -60,7 +60,6 @@ td { border-bottom: 1px solid #ddd !important; padding: 0.5rem !important; }
     # Clean sans-serif with accent headings and extra breathing room.
     "modern": """\
 /* 4Dpapers Export Template: Modern */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 body {
   max-width: 900px !important;
   margin: 0 auto !important;
@@ -94,7 +93,6 @@ tr:hover td { background: #f5fffe !important; }
     # Dense, efficient layout for data-heavy technical reports.
     "compact": """\
 /* 4Dpapers Export Template: Compact */
-@import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600&display=swap');
 body {
   max-width: 720px !important;
   margin: 0 auto !important;
@@ -129,7 +127,6 @@ p { margin-bottom: 0.6rem !important; }
     # Two-column layout inspired by arXiv/IEEE style preprints.
     "preprint": """\
 /* 4Dpapers Export Template: Preprint (two-column) */
-@import url('https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,400;0,700;1,400&display=swap');
 body {
   max-width: 1050px !important;
   margin: 0 auto !important;
@@ -272,7 +269,8 @@ def inject_figure_index(html: str) -> str:
 
     rows = ""
     for i, caption in enumerate(captions, start=1):
-        rows += f'<tr><td>Figure&nbsp;{i}</td><td>{caption}</td></tr>\n'
+        safe_caption = _html.escape(caption, quote=False)
+        rows += f'<tr><td>Figure&nbsp;{i}</td><td>{safe_caption}</td></tr>\n'
 
     index_html = (
         _FIGURE_INDEX_STYLE
@@ -311,6 +309,79 @@ def inject_figure_index(html: str) -> str:
 
 _STYLE_INJECTION_COMMENT = '<!-- fourd-template-css -->'
 
+_RESPONSIVE_FIGURE_CSS = """\
+/* 4Dpapers responsive figure guardrails */
+main.content, body {
+  box-sizing: border-box !important;
+}
+figure, .quarto-figure, .fourd-figure {
+  max-width: 100% !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  overflow-x: hidden !important;
+}
+img, img.figure-img, figure img, .quarto-figure img, .fourd-figure img {
+  max-width: 100% !important;
+  height: auto !important;
+  box-sizing: border-box !important;
+}
+iframe, .fourd-figure iframe {
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+.fourd-subfigure-grid {
+  max-width: 100% !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+.fourd-subfigure {
+  min-width: 0 !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+.fourd-graph-panel .fourd-subfigure-grid,
+.fourd-graph-panel .fourd-subfigure {
+  height: 100% !important;
+}
+.fourd-subcaption {
+  margin-top: 0.35rem !important;
+  font-size: 9.5pt !important;
+  line-height: 1.25 !important;
+  text-align: center !important;
+  font-style: italic !important;
+}
+
+@media print {
+  @page {
+    margin: 2.5cm;
+    size: A4 portrait;
+  }
+  body, main.content {
+    max-width: none !important;
+    width: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: transparent !important;
+  }
+  figure, .fourd-figure, .fourd-subfigure-grid, tr, img {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+  h1, h2, h3, h4, h5, caption, figcaption {
+    page-break-after: avoid !important;
+    break-after: avoid !important;
+  }
+  h1, h2 {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+  table {
+    page-break-before: auto !important;
+    break-before: auto !important;
+  }
+}
+"""
+
 
 def apply_template(
     html: str,
@@ -342,7 +413,10 @@ def apply_template(
     # Resolve CSS
     preset_css = TEMPLATES.get(template, TEMPLATES["academic"])
 
-    parts = [f'<style id="fourd-template-preset">\n{preset_css}\n</style>']
+    parts = [
+        f'<style id="fourd-template-preset">\n{preset_css}\n</style>',
+        f'<style id="fourd-template-responsive-figures">\n{_RESPONSIVE_FIGURE_CSS}\n</style>',
+    ]
 
     if custom_css and custom_css.strip():
         parts.append(f'<style id="fourd-template-custom">\n{custom_css}\n</style>')
