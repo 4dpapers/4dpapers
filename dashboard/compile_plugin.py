@@ -3,7 +3,7 @@ Dashboard plugin: QMD compile, PDF export, and health-check endpoints.
 
 Routes:
   POST /api/compile  — render the main QMD to HTML (or paperview HTML)
-  POST /api/export   — render paperview HTML then convert to PDF via WeasyPrint
+  POST /api/export   — render native Quarto PDF via LaTeX
   GET  /api/health   — check backend readiness (Quarto present, dirs writable)
 """
 from __future__ import annotations
@@ -16,6 +16,7 @@ import shutil
 import time
 import traceback
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
 
 import tornado.web
 
@@ -43,18 +44,32 @@ _MAX_REQUESTS_PER_MINUTE = 5
 # Maximum total body size for the compile endpoint (50 MB across all files).
 _MAX_COMPILE_BODY_BYTES = 50 * 1024 * 1024
 
-# Backstop for the WeasyPrint PDF render (run off the event loop). With the
-# offline url_fetcher below the render is network-free, so this only guards
-# against a pathological local case (huge mesh PNGs, a slow bind mount) — it is
-# NOT a network wait, so it stays short enough that a stuck export surfaces a
-# 504 long before the browser/reverse-proxy gives up on the request.
-_PDF_RENDER_TIMEOUT_S = 180
+_MIN_VALID_PDF_BYTES = 1000
 _PLACEHOLDER_MARKERS = (
     "not yet rendered",
     "not rendered — click Rebuild HTML",
     "run 'Export PDF'",
     "run 'Rebuild HTML'",
 )
+_REMOTE_SUBRESOURCE_RE = re.compile(
+    r"<(?:img|script|link)\b[^>]*\b(?:src|href)=[\"']([^\"']+)[\"']",
+    re.IGNORECASE,
+)
+_CSS_URL_RE = re.compile(r"url\(\s*[\"']?([^\"')]+)[\"']?\s*\)", re.IGNORECASE)
+_CSS_IMPORT_RE = re.compile(
+    r"@import\s+(?:url\(\s*)?[\"']?(https?://[^\"')\s;]+)",
+    re.IGNORECASE,
+)
+
+
+def _remote_pdf_assets_allowed() -> bool:
+    return os.getenv("FOURD_PDF_ALLOW_REMOTE", "").strip().lower() in {
+        "1", "true", "yes",
+    }
+
+
+def _is_remote_url(url: str) -> bool:
+    return url.strip().lower().startswith(("http://", "https://", "ftp://", "//"))
 
 def _check_rate_limit(ip: str) -> bool:
     """Returns True if the IP is allowed to make a request, False if rate limited."""
@@ -141,12 +156,27 @@ def _validate_paperview_html_output(html_path: Path) -> None:
             "Paperview HTML contains unresolved figure placeholders. Static figure generation failed."
         )
 
+    if not _remote_pdf_assets_allowed():
+        remote_assets = [
+            url for url in (
+                _REMOTE_SUBRESOURCE_RE.findall(text) + _CSS_URL_RE.findall(text)
+            )
+            if _is_remote_url(url)
+        ]
+        if remote_assets:
+            sample = ", ".join(remote_assets[:3])
+            raise ValueError(
+                "Paperview HTML references remote assets, which are disabled for "
+                f"offline PDF export: {sample}"
+            )
+
     missing_assets: list[str] = []
     for asset_ref in re.findall(r'src="((?:\.\./state/figures|/state/figures)/[^"]+)"', text):
-        if asset_ref.startswith("/state/figures/"):
-            asset_path = (_PROJECT_ROOT / asset_ref.lstrip("/")).resolve()
+        asset_path_ref = unquote(urlsplit(asset_ref).path)
+        if asset_path_ref.startswith("/state/figures/"):
+            asset_path = (_PROJECT_ROOT / asset_path_ref.lstrip("/")).resolve()
         else:
-            asset_path = (html_path.parent / asset_ref).resolve()
+            asset_path = (html_path.parent / asset_path_ref).resolve()
         if not asset_path.exists():
             missing_assets.append(asset_ref)
 
@@ -159,37 +189,163 @@ def _validate_paperview_html_output(html_path: Path) -> None:
 
 def _rewrite_paperview_asset_urls_for_pdf(html_text: str) -> str:
     """Convert app-root `/state/...` asset URLs to project-relative paths for WeasyPrint."""
-    return html_text.replace('"/state/figures/', '"../state/figures/')
+    html_text = re.sub(
+        r'src="/state/figures/([^"?]+)(?:\?[^"]*)?"',
+        r'src="../state/figures/\1"',
+        html_text,
+    )
+    return re.sub(
+        r'src="(\.\./state/figures/[^"?]+)(?:\?[^"]*)?"',
+        r'src="\1"',
+        html_text,
+    )
 
 
-def _make_pdf_url_fetcher(log_lines: list, allow_remote: bool = False):
-    """Build a WeasyPrint ``url_fetcher`` that keeps PDF rendering network-free.
+def _validate_native_pdf_output(pdf_path: Path) -> None:
+    """Ensure Quarto's native PDF output is present and plausibly valid."""
+    if not pdf_path.exists():
+        raise FileNotFoundError(f"PDF output not found: {pdf_path.name}")
+    data = pdf_path.read_bytes()
+    if not data.startswith(b"%PDF-"):
+        raise ValueError(f"PDF output is not a PDF: {pdf_path.name}")
+    if b"%%EOF" not in data[-2048:] or len(data) < _MIN_VALID_PDF_BYTES:
+        raise ValueError(f"PDF output appears truncated or empty: {pdf_path.name}")
 
-    WeasyPrint resolves every referenced stylesheet, image, and font by URL.
-    Inside an egress-restricted container a remote (``http``/``https``/``ftp``)
-    reference blocks the render on a connect timeout — the original "PDF export
-    silently does nothing" symptom, since one hung fetch stalls the whole
-    export with no error. This fetcher refuses remote URLs (WeasyPrint logs the
-    skipped resource and continues rendering, so the PDF still completes, just
-    without that asset) while letting local ``file:`` and inline ``data:``
-    content through the default fetcher untouched.
 
-    Set ``FOURD_PDF_ALLOW_REMOTE=1`` (``allow_remote=True``) to opt back into
-    fetching remote assets on an online deployment.
+_REMOTE_MD_ASSET_RE = re.compile(
+    r"!\[[^\]]*\]\(\s*(https?://[^\s)]+)",
+    re.IGNORECASE,
+)
+
+_INCLUDE_DIRECTIVE_RE = re.compile(
+    r"\{\{<\s*include\s+(?:\"([^\"]+)\"|'([^']+)'|(\S+?))\s*>\}\}",
+    re.IGNORECASE,
+)
+
+# Raw passthrough blocks (```{=latex}, ```{=html}, ...) are format-agnostic —
+# a remote reference can appear in any syntax the target renderer uses (e.g.
+# LaTeX `\includegraphics{https://...}`), not just Markdown/HTML/CSS forms.
+# Since these blocks are no longer stripped, scan their bodies for any bare
+# remote URL rather than relying on the format-specific patterns above.
+_RAW_PASSTHROUGH_BLOCK_RE = re.compile(r"```\{=[^}\n]*\}\n(.*?)```", re.DOTALL)
+_BARE_URL_RE = re.compile(r"https?://[^\s\"'()<>{}\[\]]+", re.IGNORECASE)
+
+
+_FENCED_BLOCK_RE = re.compile(r"```([^\n`]*)\n(.*?)```", re.DOTALL)
+
+
+def _strip_fenced_code_blocks(text: str) -> str:
+    """Strip ``` fenced code blocks, matching lib/parser.py's approach.
+
+    Raw passthrough blocks (```{=latex}, ```{=html}, etc.) are the exception:
+    Quarto passes their contents through verbatim into the rendered output,
+    so a remote reference hidden inside one would still reach the render.
+    Those are left in place for the scan; ordinary fenced blocks (docs
+    examples, code samples) are stripped as before.
     """
-    import weasyprint
 
-    def _fetch(url, *args, **kwargs):
-        if not allow_remote and url.lower().startswith(("http://", "https://", "ftp://")):
-            log_lines.append(
-                f"WARNING: blocked remote resource during offline PDF render: {url}"
-            )
-            raise ValueError(
-                f"Remote resources are disabled during offline PDF export: {url}"
-            )
-        return weasyprint.default_url_fetcher(url, *args, **kwargs)
+    def _replace(match: "re.Match[str]") -> str:
+        info = match.group(1).strip()
+        if info.startswith("{=") and info.endswith("}"):
+            return match.group(0)
+        return ""
 
-    return _fetch
+    return _FENCED_BLOCK_RE.sub(_replace, text)
+
+
+def _scan_qmd_for_remote_sources(
+    qmd_path: Path, visited: set[Path], *, is_root: bool = False
+) -> "str | None":
+    """Recursively scan `qmd_path` and its `{{< include ... >}}` targets.
+
+    Returns the first remote URL found, or None. `visited` guards against
+    cycles between mutually-including files. A missing *included* file is
+    skipped silently; a missing root file still raises (matching the prior,
+    single-file behaviour), since the caller is responsible for resolving a
+    valid entry point.
+    """
+    resolved = qmd_path.resolve()
+    if resolved in visited:
+        return None
+    visited.add(resolved)
+
+    if is_root:
+        text = qmd_path.read_text(encoding="utf-8", errors="replace")
+    else:
+        try:
+            text = qmd_path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            # Missing/unreadable included file — Quarto will report this far
+            # better than this validator can. Skip it, but keep scanning
+            # siblings rather than letting one bad include mask the rest.
+            return None
+
+    stripped = _strip_fenced_code_blocks(text)
+
+    raw_block_urls: list[str] = []
+    for raw_match in _RAW_PASSTHROUGH_BLOCK_RE.finditer(stripped):
+        raw_block_urls.extend(_BARE_URL_RE.findall(raw_match.group(1)))
+
+    found = (
+        _REMOTE_MD_ASSET_RE.findall(stripped)
+        + [
+            u
+            for u in (
+                _REMOTE_SUBRESOURCE_RE.findall(stripped)
+                + _CSS_URL_RE.findall(stripped)
+                + _CSS_IMPORT_RE.findall(stripped)
+            )
+            if _is_remote_url(u)
+        ]
+        + raw_block_urls
+    )
+    if found:
+        return found[0]
+
+    for match in _INCLUDE_DIRECTIVE_RE.finditer(stripped):
+        include_path = next(g for g in match.groups() if g)
+        included = (qmd_path.parent / include_path).resolve()
+        result = _scan_qmd_for_remote_sources(included, visited)
+        if result:
+            return result
+
+    return None
+
+
+def _validate_no_remote_sources(qmd_path: Path) -> None:
+    """Reject remote assets before Quarto renders a PDF.
+
+    Quarto's LaTeX writer fetches remote images over the network to embed
+    them. Offline export must not reach the network, and when it cannot,
+    pandoc fails with an unreadable Lua traceback rather than naming the
+    asset. Checking the source first keeps the old, actionable error.
+
+    4Dpapers papers are thin wrappers (see CLAUDE.md section 15): the root
+    QMD is mostly YAML metadata and `{{< include ... >}}` statements, while
+    the actual prose and figures live in included atoms under subdirectories.
+    This scan follows `{{< include ... >}}` directives recursively (relative
+    to the including file's directory), with cycle protection via a visited
+    set. A missing included file is skipped silently rather than raised —
+    Quarto will report that far better than this validator can — and does
+    not stop the scan of the remaining files. Fenced ``` code blocks are
+    stripped before scanning (matching `_extensions/4dpaper/lib/parser.py`),
+    so a documentation example showing an include or a remote URL does not
+    trip the guard. Raw passthrough blocks (```{=latex}, ```{=html}, etc.)
+    are the exception and are NOT stripped, since Quarto passes their
+    contents through verbatim into the rendered output. CSS `url(...)` and
+    bare `@import "https://..."` references are also scanned, not just
+    Markdown/HTML image references.
+
+    Set FOURD_PDF_ALLOW_REMOTE=1 to opt in to remote fetching.
+    """
+    if _remote_pdf_assets_allowed():
+        return
+    found = _scan_qmd_for_remote_sources(qmd_path, set(), is_root=True)
+    if found:
+        raise ValueError(
+            "Remote resources are disabled during offline PDF export: "
+            f"{found}"
+        )
 
 
 def _health_payload() -> tuple[int, dict]:
@@ -371,12 +527,12 @@ class CompileHandler(SecureMixin, tornado.web.RequestHandler):
 
 
 class ExportHandler(SecureMixin, tornado.web.RequestHandler):
-    """Export the document to PDF via the paperview Quarto profile + WeasyPrint.
+    """Export the document to PDF via Quarto's native LaTeX/PDF renderer.
 
     Flow:
-      1. Run Quarto with the paperview profile → produces a static HTML where
-         every interactive figure is replaced with its saved-camera PNG.
-      2. Convert that HTML to PDF using WeasyPrint (pure Python, no LaTeX needed).
+      1. Run Quarto with `--to pdf`, after the 4Dpapers pre-render hook has
+         refreshed static figure assets using any saved camera state.
+      2. Validate the generated PDF.
       3. Stream the PDF bytes back to the client.
     """
 
@@ -394,14 +550,6 @@ class ExportHandler(SecureMixin, tornado.web.RequestHandler):
         if not _check_rate_limit(client_ip):
             self.set_status(429)
             self.write({"error": "Too many requests. Please wait a minute before exporting again."})
-            return
-
-        try:
-            import weasyprint
-        except ImportError:
-            self.set_status(500)
-            self.set_header("Content-Type", "application/json")
-            self.write({"error": "weasyprint is not installed. Run: pip install weasyprint"})
             return
 
         try:
@@ -437,7 +585,10 @@ class ExportHandler(SecureMixin, tornado.web.RequestHandler):
             stem = main_qmd.stem
             csl_path = _resolve_csl(body)
 
-            # Step 1: render paperview HTML (static, figures as saved-camera PNGs)
+            # Step 1: render native PDF. The 4Dpapers pre-render hook runs
+            # first and refreshes static figure assets for LaTeX to include.
+            _validate_no_remote_sources(main_qmd)
+
             global _active_build_log
             _active_build_log.clear()
             log_lines: list[str] = _active_build_log
@@ -445,68 +596,23 @@ class ExportHandler(SecureMixin, tornado.web.RequestHandler):
             loop = asyncio.get_event_loop()
             async with _render_lock:
                 exit_code = await loop.run_in_executor(
-                    None, run_quarto_render, main_qmd, log_lines, "paperview", csl_path
+                    None, run_quarto_render, main_qmd, log_lines, "pdf", csl_path
                 )
 
             if exit_code != 0:
                 self.set_status(500)
                 self.set_header("Content-Type", "application/json")
                 self.write({
-                    "error": "Paperview render failed",
+                    "error": "PDF render failed",
                     "log": "\n".join(log_lines[-50:]),
                 })
                 return
 
-            html_path = _PROJECT_ROOT / "_output" / f"{stem}-paperview.html"
-            if not html_path.exists():
-                self.set_status(500)
-                self.set_header("Content-Type", "application/json")
-                self.write({"error": "Paperview HTML not found"})
-                return
+            pdf_path = _PROJECT_ROOT / "_output" / f"{stem}.pdf"
+            _validate_native_pdf_output(pdf_path)
+            pdf_bytes = pdf_path.read_bytes()
 
-            maybe_sign_rendered_html(html_path, log_lines)
-            _validate_paperview_html_output(html_path)
-
-            # Step 2: HTML → PDF. Rewrite app-root `/state/...` URLs into
-            # filesystem-relative paths so WeasyPrint can resolve figure assets.
-            html_text = _rewrite_paperview_asset_urls_for_pdf(
-                html_path.read_text(encoding="utf-8")
-            )
-
-            # Keep the render network-free: refuse remote asset URLs so a paper
-            # referencing an unreachable host can't hang WeasyPrint offline.
-            allow_remote = os.getenv("FOURD_PDF_ALLOW_REMOTE", "").strip().lower() in {
-                "1", "true", "yes",
-            }
-            pdf_url_fetcher = _make_pdf_url_fetcher(log_lines, allow_remote=allow_remote)
-
-            def _render_pdf() -> bytes:
-                return weasyprint.HTML(
-                    string=html_text,
-                    base_url=str(html_path.parent),
-                    url_fetcher=pdf_url_fetcher,
-                ).write_pdf()
-
-            # Run off the event loop, like the Quarto render above: WeasyPrint
-            # is synchronous and can run long on large/figure-heavy papers or
-            # a slow bind-mounted filesystem. Without this, a slow render
-            # blocks every other request on this single-threaded server,
-            # including its own /api/health — the whole container looks dead.
-            # Timeout is a local backstop (see _PDF_RENDER_TIMEOUT_S); the
-            # url_fetcher above removes the network as a source of hangs.
-            try:
-                pdf_bytes = await asyncio.wait_for(
-                    loop.run_in_executor(None, _render_pdf), timeout=_PDF_RENDER_TIMEOUT_S
-                )
-            except asyncio.TimeoutError:
-                self.set_status(504)
-                self.set_header("Content-Type", "application/json")
-                self.write({
-                    "error": f"PDF rendering (WeasyPrint) timed out after {_PDF_RENDER_TIMEOUT_S}s",
-                })
-                return
-
-            # Step 3: stream to client
+            # Step 2: stream to client
             self.set_header("Content-Type", "application/pdf")
             self.set_header("Content-Disposition", f'attachment; filename="{stem}.pdf"')
             self.write(pdf_bytes)

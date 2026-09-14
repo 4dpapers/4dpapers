@@ -89,6 +89,15 @@ def test_graph_cache_includes_camera_dependency():
     assert "is_cache_valid(out_png, src, camera_path=camera_path" in content
 
 
+def test_generated_plotly_html_is_iframe_responsive():
+    content = (
+        Path(__file__).parent.parent / "_extensions" / "4dpaper" / "4dpaper.py"
+    ).read_text()
+    assert "fourd-plotly-responsive" in content
+    assert "overflow:hidden" in content
+    assert ".plotly-graph-div{width:100%!important;height:100%!important;}" in content
+
+
 def test_plotly_json_fixture_is_parseable_and_accepted_by_shortcode_parser():
     fixture = Path(__file__).parent / "data" / "example_graph.json"
     data = json.loads(fixture.read_text(encoding="utf-8"))

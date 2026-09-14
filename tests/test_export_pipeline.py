@@ -1,7 +1,7 @@
 """Real end-to-end tests for the compile / export-HTML / export-PDF pipeline.
 
 `test_compile_plugin.py` only unit-tests pure string/path helpers, so the actual
-render path (``quarto render`` + WeasyPrint) had zero coverage — it could break
+render path had zero coverage — it could break
 completely while the suite stayed green. That is exactly what happened: the HTML
 and PDF exports silently produced nothing in a real deployment while every test
 passed.
@@ -9,8 +9,8 @@ passed.
 These tests run the *real* pipeline against a minimal-but-real Quarto project
 (reusing the repo's 4dpaper extension and render profiles) and assert that the
 produced artifacts are genuinely valid. They are skipped only when the required
-tooling (Quarto / WeasyPrint) is unavailable, and are wired to run in CI and in
-the container image where that tooling is present.
+tooling is unavailable, and are wired to run in CI and in the container image
+where that tooling is present.
 """
 from __future__ import annotations
 
@@ -20,16 +20,16 @@ from pathlib import Path
 import pytest
 
 pytest.importorskip("tornado")
-weasyprint = pytest.importorskip("weasyprint")
 
 _QUARTO = shutil.which("quarto")
+_LUALATEX = shutil.which("lualatex")
 pytestmark = pytest.mark.skipif(_QUARTO is None, reason="quarto executable not installed")
 
 _REPO = Path(__file__).parent.parent
 
 # Minimal but real paper: prose + heading + fenced code block. No figures and no
 # jupyter kernel, so the render is fast and deterministic while still exercising
-# the full Quarto → HTML → WeasyPrint path the dashboard uses.
+# the full dashboard render/export wiring.
 _MINIMAL_QMD = """\
 ---
 title: "Export Pipeline Smoke Paper"
@@ -111,39 +111,26 @@ def test_export_standalone_html_is_valid_and_self_contained(mini_project):
     _validate_standalone_html_output(out)
 
 
+@pytest.mark.skipif(_LUALATEX is None, reason="lualatex executable not installed")
 def test_export_pdf_produces_valid_pdf(mini_project):
-    """`format='paperview'` + WeasyPrint must produce a real, multi-byte PDF."""
-    from dashboard.compile_plugin import (
-        _rewrite_paperview_asset_urls_for_pdf,
-        _validate_paperview_html_output,
-    )
+    """`format='pdf'` must produce a native Quarto/LaTeX PDF."""
+    from dashboard.compile_plugin import _validate_native_pdf_output
 
     qmd = mini_project / "main.qmd"
-    rc, log = _render(qmd, "paperview")
-    assert rc == 0, "quarto paperview render failed:\n" + "\n".join(log[-25:])
+    rc, log = _render(qmd, "pdf")
+    assert rc == 0, "quarto pdf render failed:\n" + "\n".join(log[-25:])
 
-    html_path = mini_project / "_output" / "main-paperview.html"
-    assert html_path.exists(), "export did not produce _output/main-paperview.html"
-    _validate_paperview_html_output(html_path)
-
-    html_text = _rewrite_paperview_asset_urls_for_pdf(
-        html_path.read_text(encoding="utf-8")
-    )
-    pdf_bytes = weasyprint.HTML(
-        string=html_text, base_url=str(html_path.parent)
-    ).write_pdf()
-
-    assert pdf_bytes[:5] == b"%PDF-", "output is not a PDF"
-    assert b"%%EOF" in pdf_bytes[-1024:], "PDF is truncated / missing EOF"
-    assert len(pdf_bytes) > 1000, "PDF is implausibly small (likely blank)"
+    pdf_path = mini_project / "_output" / "main.pdf"
+    _validate_native_pdf_output(pdf_path)
 
 
+@pytest.mark.skipif(_LUALATEX is None, reason="lualatex executable not installed")
 def test_export_pdf_via_export_handler_streams_pdf(mini_project, monkeypatch):
     """The ExportHandler wiring must stream real PDF bytes end-to-end.
 
     Exercises the handler the frontend calls (`POST /api/export`) — reloaded so
     it binds to the hermetic PROJECT_ROOT — with a stubbed request object, to
-    catch regressions in the handler's render→validate→WeasyPrint→stream path
+    catch regressions in the handler's render→validate→stream path
     (not just the helpers).
     """
     import importlib

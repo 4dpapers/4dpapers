@@ -57,6 +57,50 @@ def test_validate_paperview_html_accepts_app_root_state_asset(tmp_path):
         _validate_paperview_html_output(html)
 
 
+def test_validate_paperview_html_accepts_versioned_state_asset(tmp_path):
+    from dashboard.compile_plugin import _validate_paperview_html_output
+    from unittest.mock import patch
+
+    project_root = tmp_path / "project"
+    output_dir = project_root / "_output"
+    figures_dir = project_root / "state" / "figures"
+    output_dir.mkdir(parents=True)
+    figures_dir.mkdir(parents=True)
+    (figures_dir / "fig-vm.png").write_bytes(b"png")
+
+    html = output_dir / "paper-paperview.html"
+    html.write_text('<img src="/state/figures/fig-vm.png?v=abc123">', encoding="utf-8")
+
+    with patch("dashboard.compile_plugin._PROJECT_ROOT", project_root):
+        _validate_paperview_html_output(html)
+
+
+def test_validate_paperview_html_rejects_remote_pdf_assets(tmp_path):
+    from dashboard.compile_plugin import _validate_paperview_html_output
+
+    html = tmp_path / "paper-paperview.html"
+    html.write_text(
+        '<img src="https://latex.codecogs.com/svg.latex?E%3Dmc%5E2">',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="remote assets"):
+        _validate_paperview_html_output(html)
+
+
+def test_validate_paperview_html_allows_remote_pdf_assets_when_enabled(tmp_path, monkeypatch):
+    from dashboard.compile_plugin import _validate_paperview_html_output
+
+    monkeypatch.setenv("FOURD_PDF_ALLOW_REMOTE", "1")
+    html = tmp_path / "paper-paperview.html"
+    html.write_text(
+        '<img src="https://latex.codecogs.com/svg.latex?E%3Dmc%5E2">',
+        encoding="utf-8",
+    )
+
+    _validate_paperview_html_output(html)
+
+
 def test_validate_paperview_html_rejects_placeholder_warning(tmp_path):
     from dashboard.compile_plugin import _validate_paperview_html_output
 
@@ -92,94 +136,156 @@ def test_rewrite_paperview_asset_urls_for_pdf_converts_state_root_url():
     assert 'src="../state/figures/fig-at.png"' in rewritten
 
 
-def test_pdf_url_fetcher_blocks_remote_and_logs():
-    """The offline PDF fetcher refuses remote URLs and records them in the log."""
-    from dashboard.compile_plugin import _make_pdf_url_fetcher
+def test_rewrite_paperview_asset_urls_for_pdf_strips_cache_queries():
+    from dashboard.compile_plugin import _rewrite_paperview_asset_urls_for_pdf
 
-    log: list[str] = []
-    fetch = _make_pdf_url_fetcher(log)
+    html = '<img src="/state/figures/fig-vm.png?v=abc"><img src="../state/figures/fig-at.png?v=def">'
+    rewritten = _rewrite_paperview_asset_urls_for_pdf(html)
 
-    for url in ("http://example.com/a.png", "https://cdn.x/y.css", "ftp://h/f"):
-        with pytest.raises(ValueError, match="[Rr]emote"):
-            fetch(url)
-
-    assert len(log) == 3
-    assert all("example.com" in m or "cdn.x" in m or "ftp://h" in m for m in log)
+    assert 'src="../state/figures/fig-vm.png"' in rewritten
+    assert 'src="../state/figures/fig-at.png"' in rewritten
+    assert "?v=" not in rewritten
 
 
-def test_pdf_url_fetcher_allows_data_uri():
-    """`data:` URIs are local content and must pass through to WeasyPrint."""
-    pytest.importorskip("weasyprint")
-    from dashboard.compile_plugin import _make_pdf_url_fetcher
+def test_validate_native_pdf_output_accepts_valid_pdf(tmp_path):
+    from dashboard.compile_plugin import _validate_native_pdf_output
 
-    log: list[str] = []
-    fetch = _make_pdf_url_fetcher(log)
-    # A 1x1 transparent PNG data URI — the default fetcher decodes it locally.
-    data_uri = (
-        "data:image/png;base64,"
-        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42m"
-        "NkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+    pdf = tmp_path / "paper.pdf"
+    pdf.write_bytes(b"%PDF-1.7\n" + b"0" * 1200 + b"\n%%EOF\n")
+
+    _validate_native_pdf_output(pdf)
+
+
+def test_validate_native_pdf_output_rejects_missing_pdf(tmp_path):
+    from dashboard.compile_plugin import _validate_native_pdf_output
+
+    with pytest.raises(FileNotFoundError, match="PDF output not found"):
+        _validate_native_pdf_output(tmp_path / "missing.pdf")
+
+
+def test_validate_native_pdf_output_rejects_truncated_pdf(tmp_path):
+    from dashboard.compile_plugin import _validate_native_pdf_output
+
+    pdf = tmp_path / "paper.pdf"
+    pdf.write_bytes(b"%PDF-1.7\nnot finished")
+
+    with pytest.raises(ValueError, match="truncated|empty"):
+        _validate_native_pdf_output(pdf)
+
+
+def test_remote_image_in_source_blocks_pdf_export(tmp_path):
+    """A remote image must be refused by name, not by pandoc traceback."""
+    from dashboard.compile_plugin import _validate_no_remote_sources
+    qmd = tmp_path / "paper.qmd"
+    qmd.write_text("# T\n\n![fig](https://example.com/remote.png)\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="Remote resources are disabled"):
+        _validate_no_remote_sources(qmd)
+
+
+def test_local_image_in_source_allows_pdf_export(tmp_path):
+    from dashboard.compile_plugin import _validate_no_remote_sources
+    qmd = tmp_path / "paper.qmd"
+    qmd.write_text("# T\n\n![fig](data/local.png)\n", encoding="utf-8")
+    _validate_no_remote_sources(qmd)  # must not raise
+
+
+def test_remote_image_allowed_when_opted_in(tmp_path, monkeypatch):
+    from dashboard.compile_plugin import _validate_no_remote_sources
+    monkeypatch.setenv("FOURD_PDF_ALLOW_REMOTE", "1")
+    qmd = tmp_path / "paper.qmd"
+    qmd.write_text("# T\n\n![fig](https://example.com/remote.png)\n", encoding="utf-8")
+    _validate_no_remote_sources(qmd)  # must not raise
+
+
+def test_remote_image_inside_included_file_is_caught(tmp_path):
+    """Papers are thin wrappers; figures live in included atoms."""
+    from dashboard.compile_plugin import _validate_no_remote_sources
+    (tmp_path / "sections").mkdir()
+    (tmp_path / "sections" / "results.qmd").write_text(
+        "## Results\n\n![fig](https://example.com/remote.png)\n", encoding="utf-8"
     )
-    result = fetch(data_uri)  # must not raise; return shape varies by version
-    assert result is not None
-    assert log == []
+    main = tmp_path / "main.qmd"
+    main.write_text("---\ntitle: T\n---\n\n{{< include sections/results.qmd >}}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="Remote resources are disabled"):
+        _validate_no_remote_sources(main)
 
 
-def test_pdf_url_fetcher_opt_in_allows_remote(monkeypatch):
-    """FOURD_PDF_ALLOW_REMOTE escape hatch lets remote URLs reach the default fetcher."""
-    weasyprint = pytest.importorskip("weasyprint")
-    from dashboard.compile_plugin import _make_pdf_url_fetcher
+def test_nested_includes_are_followed(tmp_path):
+    from dashboard.compile_plugin import _validate_no_remote_sources
+    (tmp_path / "a.qmd").write_text("{{< include b.qmd >}}\n", encoding="utf-8")
+    (tmp_path / "b.qmd").write_text("![fig](https://example.com/deep.png)\n", encoding="utf-8")
+    main = tmp_path / "main.qmd"
+    main.write_text("{{< include a.qmd >}}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="Remote resources are disabled"):
+        _validate_no_remote_sources(main)
 
-    # Stub the default fetcher so we prove delegation happens without any network.
-    seen: list[str] = []
-    monkeypatch.setattr(
-        weasyprint,
-        "default_url_fetcher",
-        lambda url, *a, **k: seen.append(url) or {"string": b"", "mime_type": "text/plain"},
+
+def test_circular_includes_do_not_hang(tmp_path):
+    from dashboard.compile_plugin import _validate_no_remote_sources
+    (tmp_path / "a.qmd").write_text("{{< include b.qmd >}}\n", encoding="utf-8")
+    (tmp_path / "b.qmd").write_text("{{< include a.qmd >}}\n", encoding="utf-8")
+    main = tmp_path / "main.qmd"
+    main.write_text("{{< include a.qmd >}}\n", encoding="utf-8")
+    _validate_no_remote_sources(main)  # must return, not recurse forever
+
+
+def test_missing_included_file_does_not_crash(tmp_path):
+    from dashboard.compile_plugin import _validate_no_remote_sources
+    main = tmp_path / "main.qmd"
+    main.write_text("{{< include nope/missing.qmd >}}\n", encoding="utf-8")
+    _validate_no_remote_sources(main)  # must not raise
+
+
+def test_remote_url_in_fenced_block_is_ignored(tmp_path):
+    """A docs example showing a remote URL must not block a real export."""
+    from dashboard.compile_plugin import _validate_no_remote_sources
+    main = tmp_path / "main.qmd"
+    main.write_text(
+        "# Docs\n\n```\n![example](https://example.com/shown-in-docs.png)\n```\n",
+        encoding="utf-8",
     )
-
-    log: list[str] = []
-    fetch = _make_pdf_url_fetcher(log, allow_remote=True)
-    fetch("http://example.com/remote.png")
-
-    assert seen == ["http://example.com/remote.png"]  # delegated, not blocked
-    assert log == []
+    _validate_no_remote_sources(main)  # must not raise
 
 
-def test_pdf_render_with_remote_reference_does_not_hang():
-    """A paper referencing an unreachable remote asset still renders a valid PDF fast.
-
-    The remote host (a TEST-NET address that black-holes connections) would hang
-    WeasyPrint's default fetcher on a connect timeout — the original silent
-    'PDF export does nothing' symptom. With the offline fetcher the reference is
-    dropped and the render completes near-instantly.
-    """
-    import time
-
-    weasyprint = pytest.importorskip("weasyprint")
-    from dashboard.compile_plugin import _make_pdf_url_fetcher
-
-    html = (
-        '<html><body><h1>Sentinel</h1>'
-        '<img src="http://192.0.2.1/never.png">'
-        '<link rel="stylesheet" href="http://192.0.2.1/never.css">'
-        '</body></html>'
+def test_remote_css_url_in_source_is_caught(tmp_path):
+    from dashboard.compile_plugin import _validate_no_remote_sources
+    main = tmp_path / "main.qmd"
+    main.write_text(
+        "# T\n\n<style>body { background: url(https://example.com/bg.png); }</style>\n",
+        encoding="utf-8",
     )
-    log: list[str] = []
-    fetcher = _make_pdf_url_fetcher(log)
-
-    t0 = time.monotonic()
-    pdf = weasyprint.HTML(string=html, url_fetcher=fetcher).write_pdf()
-    elapsed = time.monotonic() - t0
-
-    assert pdf[:5] == b"%PDF-"
-    assert len(pdf) > 500
-    assert elapsed < 15, f"render took {elapsed:.1f}s — remote fetch likely hung"
-    assert any("192.0.2.1" in m for m in log)
+    with pytest.raises(ValueError, match="Remote resources are disabled"):
+        _validate_no_remote_sources(main)
 
 
-def test_pdf_render_timeout_is_bounded():
-    """The export timeout must be a sane backstop, not a 15-minute network wait."""
-    from dashboard.compile_plugin import _PDF_RENDER_TIMEOUT_S
+def test_bare_css_import_in_source_is_caught(tmp_path):
+    from dashboard.compile_plugin import _validate_no_remote_sources
+    main = tmp_path / "main.qmd"
+    main.write_text(
+        '# T\n\n<style>@import "https://fonts.googleapis.com/css2?family=X";</style>\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="Remote resources are disabled"):
+        _validate_no_remote_sources(main)
 
-    assert 30 <= _PDF_RENDER_TIMEOUT_S <= 300
+
+def test_remote_ref_in_raw_latex_block_is_caught(tmp_path):
+    """Quarto passes ```{=latex} blocks through verbatim, so scan them."""
+    from dashboard.compile_plugin import _validate_no_remote_sources
+    main = tmp_path / "main.qmd"
+    main.write_text(
+        "# T\n\n```{=latex}\n\\includegraphics{https://example.com/remote.png}\n```\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="Remote resources are disabled"):
+        _validate_no_remote_sources(main)
+
+
+def test_local_css_url_does_not_block_export(tmp_path):
+    from dashboard.compile_plugin import _validate_no_remote_sources
+    main = tmp_path / "main.qmd"
+    main.write_text(
+        "# T\n\n<style>body { background: url(data/local-bg.png); }</style>\n",
+        encoding="utf-8",
+    )
+    _validate_no_remote_sources(main)  # must not raise

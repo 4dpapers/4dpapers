@@ -38,6 +38,28 @@ class TestParsePanelShortcodes:
         assert "camera_mode" in result[0]
 
 
+class TestParseGraphPanelShortcodes:
+    def test_graph_panel_collects_separate_json_subfigures(self):
+        mod = _load_4dpaper()
+        text = (
+            '{{< 4d-graph-panel id="gp" layout="2x2" '
+            'src1="a.json" id1="ga" src2="b.json" id2="gb" >}}'
+        )
+        result = mod.parse_graph_panel_shortcodes(text)
+        assert result[0]["id"] == "gp"
+        assert result[0]["layout"] == "2x2"
+        assert result[0]["subfigures"] == [
+            {"src": "a.json", "id": "ga", "caption": ""},
+            {"src": "b.json", "id": "gb", "caption": ""},
+        ]
+
+    def test_graph_panel_defaults_subfigure_ids(self):
+        mod = _load_4dpaper()
+        text = '{{< 4d-graph-panel id="gp" src1="a.json" src2="b.json" >}}'
+        result = mod.parse_graph_panel_shortcodes(text)
+        assert [sub["id"] for sub in result[0]["subfigures"]] == ["gp-1", "gp-2"]
+
+
 class TestGeneratePanelHtml:
     def test_sync_re_relay_contains_panel_id(self, tmp_path):
         """Sync composite HTML must contain PANEL_ID variable."""
@@ -122,6 +144,13 @@ class TestSyncPanelCacheInvalidation:
         source = inspect.getsource(mod.main)
         assert 'field_{sub[\'id\']}.json' in source
 
+    def test_main_source_collects_includes_from_all_top_level_qmds(self):
+        import inspect
+        mod = _load_4dpaper()
+        source = inspect.getsource(mod.main)
+        assert "root_qmds = preferred_roots or sorted(project_dir.glob(\"*.qmd\"))" in source
+        assert "qmd_files.extend(collect_includes(root_qmd, seen_qmds))" in source
+
 
 class TestGeneratePanelHtmlWritesManifest:
     def test_generate_panel_html_source_writes_manifest(self):
@@ -157,6 +186,54 @@ class TestFourdPanelLua:
         content = (Path(__file__).parent.parent / "_extensions" / "4dpaper" / "shortcodes.lua").read_text()
         assert 'data-panel="' in content
         assert '"id" .. n' in content
+
+
+class TestIframeSizingLua:
+    def test_shortcodes_derives_iframe_height_from_rendered_figure(self):
+        content = (Path(__file__).parent.parent / "_extensions" / "4dpaper" / "shortcodes.lua").read_text()
+        assert "local function _figure_html_height" in content
+        assert "height:%s*(%d+%.?%d*)px" in content
+        assert '_iframe_height(id, height, "600px")' in content
+
+    def test_shortcodes_versions_app_mode_state_figure_iframes(self):
+        content = (Path(__file__).parent.parent / "_extensions" / "4dpaper" / "shortcodes.lua").read_text()
+        assert "local function _state_figure_url" in content
+        assert "?v=" in content
+        assert "'<iframe src=\"' .. _state_figure_url" in content
+
+    def test_shortcodes_has_static_subimage_grid(self):
+        content = (Path(__file__).parent.parent / "_extensions" / "4dpaper" / "shortcodes.lua").read_text()
+        assert '["4d-subimages"]' in content
+        assert "fourd-subfigure-grid" in content
+        assert "grid-template-columns:repeat(" in content
+        assert "height:auto" in content
+
+    def test_shortcodes_has_graph_panel_grid(self):
+        content = (Path(__file__).parent.parent / "_extensions" / "4dpaper" / "shortcodes.lua").read_text()
+        assert '["4d-graph-panel"]' in content
+        assert "fourd_graph_panel" in content
+        assert "_state_figure_url(item.id, \".html\")" in content
+
+    def test_graph_panel_latex_avoids_nested_figure_without_caption_attr(self):
+        content = (Path(__file__).parent.parent / "_extensions" / "4dpaper" / "shortcodes.lua").read_text()
+        graph_panel = content.split("local function fourd_graph_panel", 1)[1].split("return {", 1)[0]
+        assert "local lines = {}" in graph_panel
+        assert 'if caption ~= "" then\n      table.insert(lines, "\\\\begin{figure}[h]\\n\\\\centering\\n")' in graph_panel
+
+    def test_export_template_caps_figures_to_text_width(self):
+        content = (Path(__file__).parent.parent / "_extensions" / "4dpaper" / "export_templates.py").read_text()
+        assert "_RESPONSIVE_FIGURE_CSS" in content
+        assert "figure, .quarto-figure, .fourd-figure" in content
+        assert "max-width: 100% !important" in content
+        assert ".fourd-subfigure-grid" in content
+
+    def test_paperview_css_caps_pdf_figures_to_text_width(self):
+        content = (Path(__file__).parent.parent / "_extensions" / "4dpaper" / "paperview.css").read_text()
+        assert "@media print" in content
+        assert "@page" in content
+        assert "figure, .fourd-figure" in content
+        assert ".fourd-subfigure-grid" in content
+        assert "max-width: 100% !important" in content
 
 
 class TestPanelLockToolbar:
