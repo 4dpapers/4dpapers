@@ -195,3 +195,53 @@ def test_remote_image_allowed_when_opted_in(tmp_path, monkeypatch):
     qmd = tmp_path / "paper.qmd"
     qmd.write_text("# T\n\n![fig](https://example.com/remote.png)\n", encoding="utf-8")
     _validate_no_remote_sources(qmd)  # must not raise
+
+
+def test_remote_image_inside_included_file_is_caught(tmp_path):
+    """Papers are thin wrappers; figures live in included atoms."""
+    from dashboard.compile_plugin import _validate_no_remote_sources
+    (tmp_path / "sections").mkdir()
+    (tmp_path / "sections" / "results.qmd").write_text(
+        "## Results\n\n![fig](https://example.com/remote.png)\n", encoding="utf-8"
+    )
+    main = tmp_path / "main.qmd"
+    main.write_text("---\ntitle: T\n---\n\n{{< include sections/results.qmd >}}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="Remote resources are disabled"):
+        _validate_no_remote_sources(main)
+
+
+def test_nested_includes_are_followed(tmp_path):
+    from dashboard.compile_plugin import _validate_no_remote_sources
+    (tmp_path / "a.qmd").write_text("{{< include b.qmd >}}\n", encoding="utf-8")
+    (tmp_path / "b.qmd").write_text("![fig](https://example.com/deep.png)\n", encoding="utf-8")
+    main = tmp_path / "main.qmd"
+    main.write_text("{{< include a.qmd >}}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="Remote resources are disabled"):
+        _validate_no_remote_sources(main)
+
+
+def test_circular_includes_do_not_hang(tmp_path):
+    from dashboard.compile_plugin import _validate_no_remote_sources
+    (tmp_path / "a.qmd").write_text("{{< include b.qmd >}}\n", encoding="utf-8")
+    (tmp_path / "b.qmd").write_text("{{< include a.qmd >}}\n", encoding="utf-8")
+    main = tmp_path / "main.qmd"
+    main.write_text("{{< include a.qmd >}}\n", encoding="utf-8")
+    _validate_no_remote_sources(main)  # must return, not recurse forever
+
+
+def test_missing_included_file_does_not_crash(tmp_path):
+    from dashboard.compile_plugin import _validate_no_remote_sources
+    main = tmp_path / "main.qmd"
+    main.write_text("{{< include nope/missing.qmd >}}\n", encoding="utf-8")
+    _validate_no_remote_sources(main)  # must not raise
+
+
+def test_remote_url_in_fenced_block_is_ignored(tmp_path):
+    """A docs example showing a remote URL must not block a real export."""
+    from dashboard.compile_plugin import _validate_no_remote_sources
+    main = tmp_path / "main.qmd"
+    main.write_text(
+        "# Docs\n\n```\n![example](https://example.com/shown-in-docs.png)\n```\n",
+        encoding="utf-8",
+    )
+    _validate_no_remote_sources(main)  # must not raise

@@ -213,6 +213,61 @@ _REMOTE_MD_ASSET_RE = re.compile(
     re.IGNORECASE,
 )
 
+_INCLUDE_DIRECTIVE_RE = re.compile(
+    r"\{\{<\s*include\s+(?:\"([^\"]+)\"|'([^']+)'|(\S+?))\s*>\}\}",
+    re.IGNORECASE,
+)
+
+
+def _strip_fenced_code_blocks(text: str) -> str:
+    """Strip ``` fenced code blocks, matching lib/parser.py's approach."""
+    return re.sub(r"```.*?```", "", text, flags=re.DOTALL)
+
+
+def _scan_qmd_for_remote_sources(
+    qmd_path: Path, visited: set[Path], *, is_root: bool = False
+) -> "str | None":
+    """Recursively scan `qmd_path` and its `{{< include ... >}}` targets.
+
+    Returns the first remote URL found, or None. `visited` guards against
+    cycles between mutually-including files. A missing *included* file is
+    skipped silently; a missing root file still raises (matching the prior,
+    single-file behaviour), since the caller is responsible for resolving a
+    valid entry point.
+    """
+    resolved = qmd_path.resolve()
+    if resolved in visited:
+        return None
+    visited.add(resolved)
+
+    if is_root:
+        text = qmd_path.read_text(encoding="utf-8", errors="replace")
+    else:
+        try:
+            text = qmd_path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            # Missing/unreadable included file — Quarto will report this far
+            # better than this validator can. Skip it, but keep scanning
+            # siblings rather than letting one bad include mask the rest.
+            return None
+
+    stripped = _strip_fenced_code_blocks(text)
+
+    found = _REMOTE_MD_ASSET_RE.findall(stripped) + [
+        u for u in _REMOTE_SUBRESOURCE_RE.findall(stripped) if _is_remote_url(u)
+    ]
+    if found:
+        return found[0]
+
+    for match in _INCLUDE_DIRECTIVE_RE.finditer(stripped):
+        include_path = next(g for g in match.groups() if g)
+        included = (qmd_path.parent / include_path).resolve()
+        result = _scan_qmd_for_remote_sources(included, visited)
+        if result:
+            return result
+
+    return None
+
 
 def _validate_no_remote_sources(qmd_path: Path) -> None:
     """Reject remote assets before Quarto renders a PDF.
@@ -222,23 +277,27 @@ def _validate_no_remote_sources(qmd_path: Path) -> None:
     pandoc fails with an unreadable Lua traceback rather than naming the
     asset. Checking the source first keeps the old, actionable error.
 
-    Only the given QMD file is scanned — files pulled in via
-    `{{< include ... >}}` are not followed, so a remote reference nested in
-    an included file will not be caught here and will still surface as a
-    pandoc traceback.
+    4Dpapers papers are thin wrappers (see CLAUDE.md section 15): the root
+    QMD is mostly YAML metadata and `{{< include ... >}}` statements, while
+    the actual prose and figures live in included atoms under subdirectories.
+    This scan follows `{{< include ... >}}` directives recursively (relative
+    to the including file's directory), with cycle protection via a visited
+    set. A missing included file is skipped silently rather than raised —
+    Quarto will report that far better than this validator can — and does
+    not stop the scan of the remaining files. Fenced ``` code blocks are
+    stripped before scanning (matching `_extensions/4dpaper/lib/parser.py`),
+    so a documentation example showing an include or a remote URL does not
+    trip the guard.
 
     Set FOURD_PDF_ALLOW_REMOTE=1 to opt in to remote fetching.
     """
     if _remote_pdf_assets_allowed():
         return
-    text = qmd_path.read_text(encoding="utf-8", errors="replace")
-    found = _REMOTE_MD_ASSET_RE.findall(text) + [
-        u for u in _REMOTE_SUBRESOURCE_RE.findall(text) if _is_remote_url(u)
-    ]
+    found = _scan_qmd_for_remote_sources(qmd_path, set(), is_root=True)
     if found:
         raise ValueError(
             "Remote resources are disabled during offline PDF export: "
-            f"{found[0]}"
+            f"{found}"
         )
 
 
