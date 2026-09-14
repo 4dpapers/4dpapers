@@ -208,36 +208,6 @@ def _validate_native_pdf_output(pdf_path: Path) -> None:
         raise ValueError(f"PDF output appears truncated or empty: {pdf_path.name}")
 
 
-def _make_pdf_url_fetcher(log_lines: list, allow_remote: bool = False):
-    """Build a WeasyPrint ``url_fetcher`` that keeps PDF rendering network-free.
-
-    WeasyPrint resolves every referenced stylesheet, image, and font by URL.
-    Inside an egress-restricted container a remote (``http``/``https``/``ftp``)
-    reference blocks the render on a connect timeout — the original "PDF export
-    silently does nothing" symptom, since one hung fetch stalls the whole
-    export with no error. This fetcher refuses remote URLs (WeasyPrint logs the
-    skipped resource and continues rendering, so the PDF still completes, just
-    without that asset) while letting local ``file:`` and inline ``data:``
-    content through the default fetcher untouched.
-
-    Set ``FOURD_PDF_ALLOW_REMOTE=1`` (``allow_remote=True``) to opt back into
-    fetching remote assets on an online deployment.
-    """
-    import weasyprint
-
-    def _fetch(url, *args, **kwargs):
-        if not allow_remote and url.lower().startswith(("http://", "https://", "ftp://")):
-            log_lines.append(
-                f"WARNING: blocked remote resource during offline PDF render: {url}"
-            )
-            raise ValueError(
-                f"Remote resources are disabled during offline PDF export: {url}"
-            )
-        return weasyprint.default_url_fetcher(url, *args, **kwargs)
-
-    return _fetch
-
-
 def _health_payload() -> tuple[int, dict]:
     """Return `(status_code, payload)` for backend readiness checks."""
     main_qmd = _find_main_qmd()

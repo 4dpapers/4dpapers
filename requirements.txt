@@ -10,9 +10,6 @@ trame==3.12.0
 trame-vtk==2.10.2
 trame-vuetify==3.2.1
 quarto>=0.1.0
-# weasyprint pinned: 70.0 removed weasyprint.default_url_fetcher and changed
-# the url-fetcher contract (_fail_on_errors), which breaks the PDF export path.
-weasyprint==69.0
 plotly>=5.0.0
 kaleido==0.2.1
 cryptography>=41.0.0
