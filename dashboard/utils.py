@@ -78,6 +78,7 @@ def run_quarto_render(
         # compiling paperII doesn't overwrite paperI's paperview HTML.
         cmd += ["--output", f"{qmd_path.stem}-paperview.html"]
     elif output_format == "pdf":
+        env["FOURD_STRICT_STATIC_EXPORT"] = "1"
         cmd = ["quarto", "render", str(qmd_path), "--to", "pdf"]
         cmd += ["--output", f"{qmd_path.stem}.pdf"]
     else:
