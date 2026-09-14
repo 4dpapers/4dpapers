@@ -245,3 +245,47 @@ def test_remote_url_in_fenced_block_is_ignored(tmp_path):
         encoding="utf-8",
     )
     _validate_no_remote_sources(main)  # must not raise
+
+
+def test_remote_css_url_in_source_is_caught(tmp_path):
+    from dashboard.compile_plugin import _validate_no_remote_sources
+    main = tmp_path / "main.qmd"
+    main.write_text(
+        "# T\n\n<style>body { background: url(https://example.com/bg.png); }</style>\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="Remote resources are disabled"):
+        _validate_no_remote_sources(main)
+
+
+def test_bare_css_import_in_source_is_caught(tmp_path):
+    from dashboard.compile_plugin import _validate_no_remote_sources
+    main = tmp_path / "main.qmd"
+    main.write_text(
+        '# T\n\n<style>@import "https://fonts.googleapis.com/css2?family=X";</style>\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="Remote resources are disabled"):
+        _validate_no_remote_sources(main)
+
+
+def test_remote_ref_in_raw_latex_block_is_caught(tmp_path):
+    """Quarto passes ```{=latex} blocks through verbatim, so scan them."""
+    from dashboard.compile_plugin import _validate_no_remote_sources
+    main = tmp_path / "main.qmd"
+    main.write_text(
+        "# T\n\n```{=latex}\n\\includegraphics{https://example.com/remote.png}\n```\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="Remote resources are disabled"):
+        _validate_no_remote_sources(main)
+
+
+def test_local_css_url_does_not_block_export(tmp_path):
+    from dashboard.compile_plugin import _validate_no_remote_sources
+    main = tmp_path / "main.qmd"
+    main.write_text(
+        "# T\n\n<style>body { background: url(data/local-bg.png); }</style>\n",
+        encoding="utf-8",
+    )
+    _validate_no_remote_sources(main)  # must not raise

@@ -56,6 +56,10 @@ _REMOTE_SUBRESOURCE_RE = re.compile(
     re.IGNORECASE,
 )
 _CSS_URL_RE = re.compile(r"url\(\s*[\"']?([^\"')]+)[\"']?\s*\)", re.IGNORECASE)
+_CSS_IMPORT_RE = re.compile(
+    r"@import\s+(?:url\(\s*)?[\"']?(https?://[^\"')\s;]+)",
+    re.IGNORECASE,
+)
 
 
 def _remote_pdf_assets_allowed() -> bool:
@@ -218,10 +222,35 @@ _INCLUDE_DIRECTIVE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Raw passthrough blocks (```{=latex}, ```{=html}, ...) are format-agnostic —
+# a remote reference can appear in any syntax the target renderer uses (e.g.
+# LaTeX `\includegraphics{https://...}`), not just Markdown/HTML/CSS forms.
+# Since these blocks are no longer stripped, scan their bodies for any bare
+# remote URL rather than relying on the format-specific patterns above.
+_RAW_PASSTHROUGH_BLOCK_RE = re.compile(r"```\{=[^}\n]*\}\n(.*?)```", re.DOTALL)
+_BARE_URL_RE = re.compile(r"https?://[^\s\"'()<>{}\[\]]+", re.IGNORECASE)
+
+
+_FENCED_BLOCK_RE = re.compile(r"```([^\n`]*)\n(.*?)```", re.DOTALL)
+
 
 def _strip_fenced_code_blocks(text: str) -> str:
-    """Strip ``` fenced code blocks, matching lib/parser.py's approach."""
-    return re.sub(r"```.*?```", "", text, flags=re.DOTALL)
+    """Strip ``` fenced code blocks, matching lib/parser.py's approach.
+
+    Raw passthrough blocks (```{=latex}, ```{=html}, etc.) are the exception:
+    Quarto passes their contents through verbatim into the rendered output,
+    so a remote reference hidden inside one would still reach the render.
+    Those are left in place for the scan; ordinary fenced blocks (docs
+    examples, code samples) are stripped as before.
+    """
+
+    def _replace(match: "re.Match[str]") -> str:
+        info = match.group(1).strip()
+        if info.startswith("{=") and info.endswith("}"):
+            return match.group(0)
+        return ""
+
+    return _FENCED_BLOCK_RE.sub(_replace, text)
 
 
 def _scan_qmd_for_remote_sources(
@@ -253,9 +282,23 @@ def _scan_qmd_for_remote_sources(
 
     stripped = _strip_fenced_code_blocks(text)
 
-    found = _REMOTE_MD_ASSET_RE.findall(stripped) + [
-        u for u in _REMOTE_SUBRESOURCE_RE.findall(stripped) if _is_remote_url(u)
-    ]
+    raw_block_urls: list[str] = []
+    for raw_match in _RAW_PASSTHROUGH_BLOCK_RE.finditer(stripped):
+        raw_block_urls.extend(_BARE_URL_RE.findall(raw_match.group(1)))
+
+    found = (
+        _REMOTE_MD_ASSET_RE.findall(stripped)
+        + [
+            u
+            for u in (
+                _REMOTE_SUBRESOURCE_RE.findall(stripped)
+                + _CSS_URL_RE.findall(stripped)
+                + _CSS_IMPORT_RE.findall(stripped)
+            )
+            if _is_remote_url(u)
+        ]
+        + raw_block_urls
+    )
     if found:
         return found[0]
 
@@ -287,7 +330,11 @@ def _validate_no_remote_sources(qmd_path: Path) -> None:
     not stop the scan of the remaining files. Fenced ``` code blocks are
     stripped before scanning (matching `_extensions/4dpaper/lib/parser.py`),
     so a documentation example showing an include or a remote URL does not
-    trip the guard.
+    trip the guard. Raw passthrough blocks (```{=latex}, ```{=html}, etc.)
+    are the exception and are NOT stripped, since Quarto passes their
+    contents through verbatim into the rendered output. CSS `url(...)` and
+    bare `@import "https://..."` references are also scanned, not just
+    Markdown/HTML image references.
 
     Set FOURD_PDF_ALLOW_REMOTE=1 to opt in to remote fetching.
     """
