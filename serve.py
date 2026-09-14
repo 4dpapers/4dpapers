@@ -119,6 +119,9 @@ def main():
         *quick_routes,  # Opt-in development Quick Export routes
     ]
 
+    from dashboard.sync_plugin import start_observer
+    start_observer()
+
     pn.serve(
         {},  # No Panel apps, just static + API routes
         port=port,

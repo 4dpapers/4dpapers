@@ -20,3 +20,4 @@ numpy
 # Official images include meshio so the Gmsh, MED, experimental Abaqus mesh,
 # and generic HDF5 readers work without modifying a running container.
 meshio==5.3.5
+watchdog>=4.0.0
