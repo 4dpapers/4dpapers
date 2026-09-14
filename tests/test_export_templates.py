@@ -22,7 +22,7 @@ def _load():
     return mod
 
 
-REMOTE_URL_RE = re.compile(r"url\(\s*[\"']?(https?://[^\"')]+)", re.IGNORECASE)
+REMOTE_RE = re.compile(r"https?://", re.IGNORECASE)
 
 
 @pytest.mark.parametrize("name", ["academic", "modern", "compact", "preprint"])
@@ -30,12 +30,20 @@ def test_template_contains_no_remote_urls(name):
     """Offline export must not reach the network.
 
     dashboard/compile_plugin.py rejects remote subresources during offline
-    PDF export, so a remote @import here breaks that path outright.
+    PDF export, so any remote reference here breaks that path outright.
+    Matches bare `@import "https://..."` as well as url()-wrapped forms.
     """
     mod = _load()
     css = mod.TEMPLATES[name]
-    found = REMOTE_URL_RE.findall(css)
-    assert not found, f"template {name!r} references remote resources: {found}"
+    found = REMOTE_RE.findall(css)
+    assert not found, f"template {name!r} references remote resources: {css[:400]}"
+
+
+def test_remote_url_guard_detects_bare_css_import():
+    """Guard the guard: a bare @import must be caught, not just url(...)."""
+    assert REMOTE_RE.findall('@import "https://fonts.googleapis.com/css2?family=X";')
+    assert REMOTE_RE.findall("@import url('https://fonts.googleapis.com/css2?family=X');")
+    assert not REMOTE_RE.findall("src: url('CrimsonPro-400.woff2') format('woff2');")
 
 
 def test_apply_template_injects_preset_before_head_close():
@@ -92,3 +100,16 @@ def test_inject_figure_index_is_noop_without_figures():
 def test_strip_html_tags_decodes_entities():
     mod = _load()
     assert mod._strip_html_tags("<em>a</em> &amp; <b>b</b>") == "a & b"
+
+
+def test_figure_index_escapes_caption_markup():
+    """An entity-encoded tag in a caption must not become live markup."""
+    mod = _load()
+    html_doc = (
+        '<html><body><main id="quarto-document-content">'
+        "<figure><figcaption>Flow in &lt;script&gt;alert(1)&lt;/script&gt; region"
+        "</figcaption></figure></main></body></html>"
+    )
+    out = mod.inject_figure_index(html_doc)
+    assert "<script>alert(1)</script>" not in out
+    assert "&lt;script&gt;" in out

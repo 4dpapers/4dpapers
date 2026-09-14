@@ -12,6 +12,7 @@ Usage (from template_plugin.py):
 """
 from __future__ import annotations
 
+import html as _html
 import re
 from typing import Optional
 
@@ -268,7 +269,8 @@ def inject_figure_index(html: str) -> str:
 
     rows = ""
     for i, caption in enumerate(captions, start=1):
-        rows += f'<tr><td>Figure&nbsp;{i}</td><td>{caption}</td></tr>\n'
+        safe_caption = _html.escape(caption, quote=False)
+        rows += f'<tr><td>Figure&nbsp;{i}</td><td>{safe_caption}</td></tr>\n'
 
     index_html = (
         _FIGURE_INDEX_STYLE
