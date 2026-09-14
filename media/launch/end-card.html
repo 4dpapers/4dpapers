@@ -1,0 +1,115 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  :root{
+    --ink:#0a0c14;--navy:#141725;--panel:#181c2c;
+    --teal:#1FB6A3;--teal-deep:#138a7c;
+    --text:#EAF0F2;--muted:#8b93a7;--faint:#5b6478;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:1920px;height:1080px;overflow:hidden;background:var(--ink)}
+  .stage{position:relative;width:1920px;height:1080px;
+    background:
+      radial-gradient(1300px 1050px at 74% 54%, #181c2e 0%, #11142080 46%, #0a0c14 100%),
+      linear-gradient(120deg,#0b0d16 0%,#141725 55%,#0d1019 100%);
+    font-family:'Outfit',system-ui,sans-serif;}
+  #field{position:absolute;inset:0}
+  .veil{position:absolute;inset:0;
+    background:linear-gradient(90deg,#0a0c14 6%,#0a0c1492 32%,transparent 58%);}
+  .content{position:absolute;left:150px;top:0;height:1080px;width:1140px;
+    display:flex;flex-direction:column;justify-content:center;}
+  .eyebrow{font-family:'JetBrains Mono',monospace;font-weight:500;font-size:19px;
+    letter-spacing:.40em;color:var(--teal);text-transform:uppercase;
+    margin-bottom:30px;padding-left:3px;}
+  .head{font-weight:500;font-size:92px;line-height:1.0;letter-spacing:-.028em;
+    color:var(--text);}
+  .head b{font-weight:600;color:var(--teal)}
+  .sub{font-weight:300;font-size:30px;color:var(--muted);margin-top:22px;
+    letter-spacing:.01em;padding-left:3px;}
+  .sub .dot{color:var(--teal-deep);margin:0 14px;font-weight:600}
+  .cmd{margin-top:52px;background:linear-gradient(180deg,#141828,#10131f);
+    border:1px solid #262d44;border-left:4px solid var(--teal);
+    border-radius:12px;padding:30px 36px;width:1480px;
+    box-shadow:0 24px 60px -28px rgba(0,0,0,.9), inset 0 1px 0 #ffffff08;}
+  .cmd .p{font-family:'JetBrains Mono',monospace;color:var(--teal);font-size:26px;
+    margin-right:14px;}
+  .cmd code{font-family:'JetBrains Mono',monospace;font-size:26px;color:#d6dcea;
+    letter-spacing:0;white-space:nowrap;}
+  .cmd code .k{color:#7fd7c8}
+  .cmd code .v{color:#e7c07a}
+  .repo{margin-top:44px;display:flex;align-items:center;gap:18px;padding-left:3px;}
+  .repo .arrow{color:var(--teal);font-size:34px;line-height:1}
+  .repo .u{font-family:'JetBrains Mono',monospace;font-weight:500;font-size:32px;
+    color:var(--text);letter-spacing:.01em;}
+  .repo .u b{color:var(--teal)}
+  .mk{position:absolute;font-family:'JetBrains Mono',monospace;color:var(--faint);
+    font-size:17px;letter-spacing:.24em;}
+  .mk.tr{right:64px;top:58px;color:var(--muted)}
+  .mk.br{right:64px;bottom:56px}
+  .mk.bl{left:154px;bottom:56px;letter-spacing:.30em}
+  .cross{position:absolute;width:16px;height:16px}
+  .cross:before,.cross:after{content:"";position:absolute;background:#37426b}
+  .cross:before{left:7px;top:0;width:2px;height:16px}
+  .cross:after{left:0;top:7px;width:16px;height:2px}
+  .tick{position:absolute;background:#2a3350}
+</style>
+</head>
+<body>
+  <div class="stage">
+    <canvas id="field" width="1920" height="1080"></canvas>
+    <div class="veil"></div>
+
+    <div class="cross" style="left:64px;top:64px"></div>
+    <div class="cross" style="right:64px;top:110px"></div>
+    <div class="tick" style="right:64px;top:88px;width:120px;height:1px"></div>
+    <div class="mk tr">v0.1.2</div>
+    <div class="mk br">ISOCHRONE · 4D FIELD</div>
+    <div class="mk bl">FIG.02 — RUN</div>
+
+    <div class="content">
+      <div class="eyebrow">Source-available&nbsp;&nbsp;·&nbsp;&nbsp;Runs offline</div>
+      <div class="head">Run it in <b>one command.</b></div>
+      <div class="sub">Interactive HTML<span class="dot">·</span>static PDF<span class="dot">·</span>27+ formats</div>
+      <div class="cmd">
+        <code><span class="k">IMAGE</span>=ghcr.io/4dpapers/4dpapers:<span class="v">0.1.2</span> <span class="k">FOURD_WORKSPACE</span>=./examples/niederer docker compose up</code>
+      </div>
+      <div class="repo">
+        <span class="arrow">→</span>
+        <span class="u">github.com/<b>4dpapers/4dpapers</b></span>
+      </div>
+    </div>
+  </div>
+
+<script>
+function lerp(a,b,t){return a+(b-a)*t}
+function hex(c){c=c.replace('#','');return [parseInt(c.slice(0,2),16),parseInt(c.slice(2,4),16),parseInt(c.slice(4,6),16)]}
+function ramp(t){
+  const stops=[[0,'#243a86'],[0.34,'#138a7c'],[0.62,'#c98a44'],[1,'#a5122a']];
+  for(let i=0;i<stops.length-1;i++){
+    if(t<=stops[i+1][0]){const [t0,c0]=stops[i],[t1,c1]=stops[i+1];
+      const k=(t-t0)/(t1-t0),A=hex(c0),B=hex(c1);
+      return `rgb(${Math.round(lerp(A[0],B[0],k))},${Math.round(lerp(A[1],B[1],k))},${Math.round(lerp(A[2],B[2],k))})`;}
+  }
+  return '#a5122a';
+}
+const cv=document.getElementById('field'),x=cv.getContext('2d');
+const fx=1418,fy=560,N=58,rMin=24,rMax=1720;
+x.lineCap='round';
+for(let i=0;i<N;i++){const p=i/(N-1);
+  const r=rMin+(rMax-rMin)*Math.pow(p,1.3),t=1-p;
+  x.beginPath();x.arc(fx,fy,r,0,Math.PI*2);
+  x.strokeStyle=ramp(t);
+  x.globalAlpha=0.08+0.34*Math.pow(1-p,1.7);
+  x.lineWidth=r<480?1.4:1.0;x.stroke();}
+x.globalAlpha=0.08;x.strokeStyle='#4a5578';x.lineWidth=1;
+for(let a=0;a<12;a++){const ang=a*Math.PI/6;x.beginPath();x.moveTo(fx,fy);
+  x.lineTo(fx+Math.cos(ang)*1700,fy+Math.sin(ang)*1700);x.stroke();}
+const g=x.createRadialGradient(fx,fy,0,fx,fy,170);
+g.addColorStop(0,'rgba(233,120,90,.5)');g.addColorStop(.4,'rgba(31,182,163,.16)');g.addColorStop(1,'transparent');
+x.globalAlpha=1;x.fillStyle=g;x.beginPath();x.arc(fx,fy,170,0,Math.PI*2);x.fill();
+window.__drawn=true;
+</script>
+</body>
+</html>

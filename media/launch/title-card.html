@@ -1,0 +1,117 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  :root{
+    --ink:#0a0c14; --navy:#141725; --panel:#1B1F30;
+    --teal:#1FB6A3; --teal-deep:#138a7c;
+    --text:#EAF0F2; --muted:#8b93a7; --faint:#5b6478;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:1920px;height:1080px;overflow:hidden;background:var(--ink)}
+  .stage{position:relative;width:1920px;height:1080px;
+    background:
+      radial-gradient(1400px 1100px at 71% 46%, #191d30 0%, #12152180 45%, #0a0c14 100%),
+      linear-gradient(120deg,#0b0d16 0%,#141725 55%,#0d1019 100%);
+    font-family:'Outfit',system-ui,sans-serif;}
+  #field{position:absolute;inset:0}
+  /* left-side calm: let text breathe over the field */
+  .veil{position:absolute;inset:0;
+    background:linear-gradient(90deg,#0a0c14 8%,#0a0c1490 34%,transparent 62%);}
+  .content{position:absolute;left:150px;top:0;height:1080px;width:1040px;
+    display:flex;flex-direction:column;justify-content:center;}
+  .eyebrow{font-family:'JetBrains Mono',monospace;font-weight:500;
+    font-size:19px;letter-spacing:.44em;color:var(--teal);
+    text-transform:uppercase;margin-bottom:34px;padding-left:4px;}
+  .eyebrow .dim{color:var(--faint)}
+  .wordmark{font-weight:600;font-size:158px;line-height:.92;letter-spacing:-.035em;
+    color:var(--text);}
+  .wordmark .fourd{color:var(--teal);}
+  .rule{width:118px;height:2px;background:var(--teal);margin:44px 4px 40px;
+    box-shadow:0 0 22px 1px rgba(31,182,163,.55);}
+  .tag{font-weight:300;font-size:46px;letter-spacing:.006em;color:#c9d1de;}
+  .tag b{font-weight:600;color:var(--teal)}
+  .disc{font-family:'JetBrains Mono',monospace;font-weight:400;font-size:20px;
+    letter-spacing:.30em;color:var(--muted);margin-top:52px;padding-left:4px;}
+  .disc .sep{color:var(--teal-deep);margin:0 12px}
+  /* clinical reference markers */
+  .mk{position:absolute;font-family:'JetBrains Mono',monospace;color:var(--faint);
+    font-size:17px;letter-spacing:.24em;}
+  .mk.tr{right:64px;top:58px;color:var(--muted)}
+  .mk.br{right:64px;bottom:56px}
+  .mk.bl{left:154px;bottom:56px;letter-spacing:.30em}
+  .tick{position:absolute;background:#2a3350}
+  .cross{position:absolute;width:16px;height:16px}
+  .cross:before,.cross:after{content:"";position:absolute;background:#37426b}
+  .cross:before{left:7px;top:0;width:2px;height:16px}
+  .cross:after{left:0;top:7px;width:16px;height:2px}
+</style>
+</head>
+<body>
+  <div class="stage">
+    <canvas id="field" width="1920" height="1080"></canvas>
+    <div class="veil"></div>
+
+    <!-- corner instrument marks -->
+    <div class="cross" style="left:64px;top:64px"></div>
+    <div class="cross" style="right:64px;top:110px"></div>
+    <div class="tick" style="right:64px;top:88px;width:120px;height:1px"></div>
+    <div class="mk tr">v0.1.2</div>
+    <div class="mk br">ISOCHRONE · 4D FIELD</div>
+    <div class="mk bl">FIG.01 — SPACE × TIME</div>
+
+    <div class="content">
+      <div class="eyebrow">Write&nbsp;·&nbsp;Embed&nbsp;figures&nbsp;·&nbsp;Ship&nbsp;one&nbsp;file</div>
+      <div class="wordmark"><span class="fourd">4D</span>papers</div>
+      <div class="rule"></div>
+      <div class="tag">One file. Any browser. <b>Still&nbsp;alive.</b></div>
+      <div class="disc">CARDIAC&nbsp;EP<span class="sep">/</span>CFD<span class="sep">/</span>FEA<span class="sep">/</span>GEOMETRY</div>
+    </div>
+  </div>
+
+<script>
+// ---- Isochrone wavefront field -------------------------------------------
+// Concentric time-contours radiating from a focus, coloured by a muted
+// coolwarm ramp (deep blue = early / outer  ->  ember = late / core).
+function lerp(a,b,t){return a+(b-a)*t}
+function hex(c){c=c.replace('#','');return [parseInt(c.slice(0,2),16),parseInt(c.slice(2,4),16),parseInt(c.slice(4,6),16)]}
+function ramp(t){ // t 0..1
+  const stops=[[0,'#243a86'],[0.34,'#138a7c'],[0.62,'#c98a44'],[1,'#a5122a']];
+  for(let i=0;i<stops.length-1;i++){
+    if(t<=stops[i+1][0]){
+      const [t0,c0]=stops[i],[t1,c1]=stops[i+1];
+      const k=(t-t0)/(t1-t0), A=hex(c0),B=hex(c1);
+      return `rgb(${Math.round(lerp(A[0],B[0],k))},${Math.round(lerp(A[1],B[1],k))},${Math.round(lerp(A[2],B[2],k))})`;
+    }
+  }
+  return '#a5122a';
+}
+const cv=document.getElementById('field'), x=cv.getContext('2d');
+const fx=1362, fy=498;           // focus
+const N=64, rMin=26, rMax=1780;
+x.lineCap='round';
+for(let i=0;i<N;i++){
+  const p=i/(N-1);
+  const r=rMin+(rMax-rMin)*Math.pow(p,1.28);
+  const t=1-p;                    // inner rings warm
+  x.beginPath();
+  x.arc(fx,fy,r,0,Math.PI*2);
+  x.strokeStyle=ramp(t);
+  x.globalAlpha=0.18+0.55*Math.pow(1-p,1.5);   // fade outward
+  x.lineWidth=r<520?1.7:1.2;
+  x.stroke();
+}
+// faint angular spokes — instrument grid
+x.globalAlpha=0.09;x.strokeStyle='#4a5578';x.lineWidth=1;
+for(let a=0;a<12;a++){const ang=a*Math.PI/6;
+  x.beginPath();x.moveTo(fx,fy);
+  x.lineTo(fx+Math.cos(ang)*1760,fy+Math.sin(ang)*1760);x.stroke();}
+// luminous core
+const g=x.createRadialGradient(fx,fy,0,fx,fy,180);
+g.addColorStop(0,'rgba(233,120,90,.55)');g.addColorStop(.4,'rgba(31,182,163,.18)');g.addColorStop(1,'transparent');
+x.globalAlpha=1;x.fillStyle=g;x.beginPath();x.arc(fx,fy,180,0,Math.PI*2);x.fill();
+window.__drawn=true;
+</script>
+</body>
+</html>

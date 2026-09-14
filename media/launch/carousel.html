@@ -1,0 +1,256 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  :root{
+    --ink:#0a0c14;--navy:#141725;--panel:#141828;
+    --teal:#1FB6A3;--teal-deep:#138a7c;
+    --text:#EAF0F2;--muted:#8b93a7;--faint:#5b6478;--line:#242c44;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#000;font-family:'Outfit',system-ui,sans-serif}
+  .page{position:relative;width:1080px;height:1350px;overflow:hidden;
+    background:radial-gradient(1200px 1200px at 68% 40%, #15192c 0%, #0e1120 52%, #0a0c14 100%);}
+  .field{position:absolute;inset:0}
+  .frame{position:absolute;inset:0;padding:82px 84px 74px;display:flex;flex-direction:column}
+  .top{display:flex;justify-content:space-between;align-items:center;
+    font-family:'JetBrains Mono',monospace;font-size:20px;letter-spacing:.26em;color:var(--faint)}
+  .top .brand{color:#c8d0e0}.top .brand b{color:var(--teal)}
+  .mid{flex:1;display:flex;flex-direction:column;justify-content:center}
+  .bot{display:flex;justify-content:space-between;align-items:center;
+    font-family:'JetBrains Mono',monospace;font-size:19px;letter-spacing:.2em;color:var(--faint)}
+
+  .kicker{font-family:'JetBrains Mono',monospace;font-weight:500;font-size:22px;
+    letter-spacing:.34em;color:var(--teal);text-transform:uppercase;margin-bottom:30px}
+  .h1{font-weight:600;font-size:88px;line-height:1.0;letter-spacing:-.03em;color:var(--text)}
+  .h1.sm{font-size:74px}
+  .lead{font-weight:300;font-size:35px;line-height:1.5;color:#c2cad9;margin-top:34px;max-width:850px}
+  .lead b{font-weight:500;color:#fff}
+  .rule{width:120px;height:3px;background:var(--teal);margin:38px 0 34px;border-radius:2px;
+    box-shadow:0 0 22px 1px rgba(31,182,163,.5)}
+
+  .wordmark{font-weight:600;font-size:176px;line-height:.9;letter-spacing:-.035em;color:var(--text)}
+  .wordmark .fourd{color:var(--teal)}
+  .tag{font-weight:300;font-size:52px;color:#c9d1de}.tag b{font-weight:600;color:var(--teal)}
+  .disc{font-family:'JetBrains Mono',monospace;font-size:22px;letter-spacing:.26em;color:var(--muted);margin-top:46px}
+  .disc .s{color:var(--teal-deep);margin:0 10px}
+
+  /* editor snippet */
+  .editor{margin-top:46px;border:1px solid #262d44;border-radius:14px;overflow:hidden;
+    background:linear-gradient(180deg,#0f1320,#0c0f1a);box-shadow:0 30px 70px -34px #000}
+  .editor .bar{height:44px;display:flex;align-items:center;gap:9px;padding:0 18px;border-bottom:1px solid #202840}
+  .editor .bar .d{width:11px;height:11px;border-radius:50%}
+  .editor .bar .n{margin-left:12px;font-family:'JetBrains Mono',monospace;font-size:16px;color:#9aa3b8}
+  .editor pre{margin:0;padding:26px 28px;font-family:'JetBrains Mono',monospace;font-size:26px;line-height:1.6;color:#cdd5e4;white-space:pre-wrap}
+  .c-head{color:#82AAFF;font-weight:500}.c-sc{color:var(--teal)}.c-attr{color:#C792EA}.c-str{color:#e7c07a}.c-txt{color:#9aa6bd}
+
+  /* file window (mini paper) */
+  .filewin{width:640px;border:1px solid #29314c;border-radius:16px;overflow:hidden;margin:6px auto 0;
+    background:linear-gradient(180deg,#151a2b,#0f121e);box-shadow:0 34px 90px -34px #000,0 0 70px -14px rgba(31,182,163,.3)}
+  .fbar{height:46px;display:flex;align-items:center;gap:9px;padding:0 18px;border-bottom:1px solid #222a40}
+  .fbar .d{width:11px;height:11px;border-radius:50%}
+  .fname{margin-left:12px;font-family:'JetBrains Mono',monospace;font-size:17px;color:#9aa3b8}
+  .fbody{padding:26px 28px;display:flex;flex-direction:column;gap:16px}
+  .doc-h{font-weight:600;font-size:26px;color:#e7edf6}
+  .tline{height:9px;border-radius:5px;background:#232b42}
+  .eq{border:1px solid #29314c;border-radius:9px;background:#0d1120;padding:14px;text-align:center;
+    font-family:'JetBrains Mono',monospace;font-size:21px;color:#bfe9e0}
+  .figblk{border:1px solid #26314f;border-radius:11px;background:#0f1424;padding:15px 18px;display:flex;align-items:center;gap:18px}
+  .figblk .txt{flex:1}
+  .figblk .fcap{font-family:'JetBrains Mono',monospace;font-size:15px;letter-spacing:.14em;color:var(--faint);text-transform:uppercase}
+  .figblk .fmain{font-size:20px;color:#cdd5e4;margin-top:3px}
+  .play{width:0;height:0;border-left:17px solid var(--teal);border-top:11px solid transparent;border-bottom:11px solid transparent}
+  .badges{margin-top:26px;display:flex;gap:14px;justify-content:center}
+  .badge{padding:11px 18px;border-radius:999px;border:1px solid rgba(31,182,163,.35);background:rgba(31,182,163,.08);
+    font-family:'JetBrains Mono',monospace;font-size:17px;color:#a9e6dc}
+  .contrast{margin-top:40px;text-align:center;font-weight:300;font-size:30px;color:#aeb7c8;line-height:1.5}
+  .contrast b{color:#fff;font-weight:500}
+
+  /* figure viewer (page 5) */
+  .viewer{margin-top:14px;border:1px solid #2a3350;border-radius:16px;overflow:hidden;background:#0f1220;
+    box-shadow:0 34px 90px -34px #000}
+  .viewer .vbar{height:52px;display:flex;align-items:center;gap:14px;padding:0 20px;background:#11162480;border-bottom:1px solid #222a40;
+    font-family:'JetBrains Mono',monospace;font-size:18px;color:#9aa3b8}
+  .viewer .vbar .play{border-left-color:var(--teal)}
+  .viewer img{display:block;width:100%;background:#fff}
+  .vcap{font-weight:300;font-size:30px;color:#b9c1d2;margin-top:32px;line-height:1.5}
+  .vcap b{color:#fff;font-weight:500}
+
+  /* format chips */
+  .chips{display:flex;flex-wrap:wrap;gap:16px;margin-top:44px;max-width:900px}
+  .chip{padding:14px 22px;border:1px solid #29314c;border-radius:10px;background:#10131f;
+    font-family:'JetBrains Mono',monospace;font-size:24px;color:#cdd5e4}
+  .chip.more{border-color:var(--teal-deep);color:var(--teal)}
+
+  /* command box */
+  .cmd{margin-top:46px;background:linear-gradient(180deg,#141828,#10131f);border:1px solid #262d44;border-left:5px solid var(--teal);
+    border-radius:14px;padding:30px 32px;box-shadow:0 24px 60px -30px #000}
+  .cmd code{font-family:'JetBrains Mono',monospace;font-size:26px;color:#d6dcea;line-height:1.6;word-break:break-word}
+  .cmd code .k{color:#7fd7c8}.cmd code .v{color:#e7c07a}
+  .repo{margin-top:40px;font-family:'JetBrains Mono',monospace;font-weight:500;font-size:34px;color:var(--text)}
+  .repo .a{color:var(--teal)}.repo b{color:var(--teal)}
+  .note{margin-top:26px;font-family:'JetBrains Mono',monospace;font-size:20px;letter-spacing:.14em;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<!-- ============ 01 COVER ============ -->
+<div class="page">
+  <canvas class="field" width="1080" height="1350" data-fx="760" data-fy="470" data-amp="1"></canvas>
+  <div class="frame">
+    <div class="top"><span class="brand"><b>4D</b>PAPERS</span><span>v0.1.2</span></div>
+    <div class="mid">
+      <div class="kicker">Write · Embed figures · Ship one file</div>
+      <div class="wordmark"><span class="fourd">4D</span>papers</div>
+      <div class="rule"></div>
+      <div class="tag">One file. Any browser. <b>Still&nbsp;alive.</b></div>
+      <div class="disc">CARDIAC&nbsp;EP<span class="s">/</span>CFD<span class="s">/</span>FEA<span class="s">/</span>GEOMETRY</div>
+    </div>
+    <div class="bot"><span>ISOCHRONE · 4D FIELD</span><span>swipe →</span></div>
+  </div>
+</div>
+
+<!-- ============ 02 PROBLEM ============ -->
+<div class="page">
+  <canvas class="field" width="1080" height="1350" data-fx="880" data-fy="1050" data-amp=".8"></canvas>
+  <div class="frame">
+    <div class="top"><span class="brand"><b>4D</b>PAPERS</span><span>02 / 07</span></div>
+    <div class="mid">
+      <div class="kicker">The problem</div>
+      <div class="h1">Your results<br>die in the PDF.</div>
+      <div class="lead">You run the simulation — a beating heart, a turbulent flow, a loaded part — then flatten all that 3D and time into <b>one dead image</b>. Or you hide it behind a platform login.</div>
+    </div>
+    <div class="bot"><span>github.com/4dpapers/4dpapers</span><span>FIG.02</span></div>
+  </div>
+</div>
+
+<!-- ============ 03 WHAT IT IS ============ -->
+<div class="page">
+  <canvas class="field" width="1080" height="1350" data-fx="900" data-fy="360" data-amp=".7"></canvas>
+  <div class="frame">
+    <div class="top"><span class="brand"><b>4D</b>PAPERS</span><span>03 / 07</span></div>
+    <div class="mid">
+      <div class="kicker">What it is</div>
+      <div class="h1 sm">A research-paper IDE.</div>
+      <div class="lead">You write the <b>whole paper</b> — prose, equations, references — and drop interactive 3D + time figures straight into the text.</div>
+      <div class="editor">
+        <div class="bar"><span class="d" style="background:#e0655b"></span><span class="d" style="background:#e0b24f"></span><span class="d" style="background:#4fbf7f"></span><span class="n">paper.qmd</span></div>
+<pre><span class="c-head">## Ventricular activation</span>
+<span class="c-txt">The depolarization wavefront sweeps</span>
+<span class="c-txt">through the tissue…</span>
+
+<span class="c-sc">{{&lt; 4d-image</span> <span class="c-attr">src</span>=<span class="c-str">"heart.vtu"</span> <span class="c-attr">field</span>=<span class="c-str">"Vm"</span> <span class="c-sc">&gt;}}</span></pre>
+      </div>
+    </div>
+    <div class="bot"><span>github.com/4dpapers/4dpapers</span><span>FIG.03</span></div>
+  </div>
+</div>
+
+<!-- ============ 04 THE DIFFERENCE ============ -->
+<div class="page">
+  <canvas class="field" width="1080" height="1350" data-fx="540" data-fy="270" data-amp=".55"></canvas>
+  <div class="frame">
+    <div class="top"><span class="brand"><b>4D</b>PAPERS</span><span>04 / 07</span></div>
+    <div class="mid">
+      <div class="kicker" style="text-align:center">The difference</div>
+      <div class="h1 sm" style="text-align:center;margin-bottom:6px">A document,<br>not a dependency.</div>
+      <div class="filewin">
+        <div class="fbar"><span class="d" style="background:#e0655b"></span><span class="d" style="background:#e0b24f"></span><span class="d" style="background:#4fbf7f"></span><span class="fname">paper.html</span></div>
+        <div class="fbody">
+          <div class="doc-h">3 · Ventricular activation</div>
+          <div class="tline" style="width:100%"></div>
+          <div class="tline" style="width:93%"></div>
+          <div class="eq">∂Vₘ/∂t = ∇·(D∇Vₘ) − Iᵢₒₙ</div>
+          <div class="figblk">
+            <svg width="60" height="60" viewBox="0 0 60 60" fill="none" stroke-width="1.7">
+              <circle cx="30" cy="30" r="6" stroke="#a5122a"/><circle cx="30" cy="30" r="12.5" stroke="#c98a44"/>
+              <circle cx="30" cy="30" r="19" stroke="#1FB6A3"/><circle cx="30" cy="30" r="25.5" stroke="#3b4cc0"/>
+            </svg>
+            <div class="txt"><div class="fcap">Figure 1 · live</div><div class="fmain">rotate · play · switch field</div></div>
+            <div class="play"></div>
+          </div>
+          <div class="tline" style="width:70%"></div>
+        </div>
+      </div>
+      <div class="badges"><span class="badge">any browser</span><span class="badge">offline</span><span class="badge">email · USB</span></div>
+      <div class="contrast">Others host your figure on <b>their server</b>.<br>4Dpapers seals the whole paper into <b>one file</b>.</div>
+    </div>
+    <div class="bot"><span>github.com/4dpapers/4dpapers</span><span>FIG.04</span></div>
+  </div>
+</div>
+
+<!-- ============ 05 PROOF ============ -->
+<div class="page">
+  <canvas class="field" width="1080" height="1350" data-fx="880" data-fy="1080" data-amp=".5"></canvas>
+  <div class="frame">
+    <div class="top"><span class="brand"><b>4D</b>PAPERS</span><span>05 / 07</span></div>
+    <div class="mid">
+      <div class="kicker">Proof</div>
+      <div class="h1 sm">Real science.<br>Still interactive.</div>
+      <div class="viewer">
+        <div class="vbar"><span class="play"></span><span>heart.vtu · Vm · t = 0.12 s</span></div>
+        <img id="heartimg" alt="cardiac figure">
+      </div>
+      <div class="vcap">Cardiac electrophysiology — <b>rotate</b> the heart, <b>switch fields</b>, <b>scrub</b> the activation in time. In the browser. Offline.</div>
+    </div>
+    <div class="bot"><span>github.com/4dpapers/4dpapers</span><span>FIG.05</span></div>
+  </div>
+</div>
+
+<!-- ============ 06 REACH ============ -->
+<div class="page">
+  <canvas class="field" width="1080" height="1350" data-fx="820" data-fy="420" data-amp=".7"></canvas>
+  <div class="frame">
+    <div class="top"><span class="brand"><b>4D</b>PAPERS</span><span>06 / 07</span></div>
+    <div class="mid">
+      <div class="kicker">No lock-in</div>
+      <div class="h1 sm">Reads what you<br>already have.</div>
+      <div class="chips">
+        <span class="chip">OpenFOAM</span><span class="chip">VTK</span><span class="chip">VTU</span><span class="chip">PVD</span>
+        <span class="chip">Exodus</span><span class="chip">XDMF</span><span class="chip">CGNS</span><span class="chip">EnSight</span>
+        <span class="chip">STL</span><span class="chip">OBJ</span><span class="chip">PLY</span><span class="chip">Gmsh</span>
+        <span class="chip more">+ 27 formats</span>
+      </div>
+      <div class="lead">Compiles to interactive <b>HTML</b> and a clean <b>PDF</b> — and the whole thing runs <b>fully offline</b>.</div>
+    </div>
+    <div class="bot"><span>github.com/4dpapers/4dpapers</span><span>FIG.06</span></div>
+  </div>
+</div>
+
+<!-- ============ 07 CTA ============ -->
+<div class="page">
+  <canvas class="field" width="1080" height="1350" data-fx="760" data-fy="900" data-amp="1"></canvas>
+  <div class="frame">
+    <div class="top"><span class="brand"><b>4D</b>PAPERS</span><span>07 / 07</span></div>
+    <div class="mid">
+      <div class="kicker">Get started</div>
+      <div class="h1 sm">Run it in<br>one command.</div>
+      <div class="cmd"><code><span class="k">IMAGE</span>=ghcr.io/4dpapers/4dpapers:<span class="v">0.1.2</span> <span class="k">FOURD_WORKSPACE</span>=./examples/niederer docker compose up</code></div>
+      <div class="repo"><span class="a">→</span> github.com/<b>4dpapers/4dpapers</b></div>
+      <div class="note">SOURCE-AVAILABLE · RUNS OFFLINE · v0.1.2</div>
+    </div>
+    <div class="bot"><span>A document, not a dependency.</span><span>ISOCHRONE</span></div>
+  </div>
+</div>
+
+<script>
+function lerp(a,b,t){return a+(b-a)*t}
+function hex(c){c=c.replace('#','');return [parseInt(c.slice(0,2),16),parseInt(c.slice(2,4),16),parseInt(c.slice(4,6),16)]}
+function ramp(t){const st=[[0,'#243a86'],[0.34,'#138a7c'],[0.62,'#c98a44'],[1,'#a5122a']];
+  for(let i=0;i<st.length-1;i++){if(t<=st[i+1][0]){const[t0,c0]=st[i],[t1,c1]=st[i+1];const k=(t-t0)/(t1-t0),A=hex(c0),B=hex(c1);
+    return`rgb(${Math.round(lerp(A[0],B[0],k))},${Math.round(lerp(A[1],B[1],k))},${Math.round(lerp(A[2],B[2],k))})`;}}return'#a5122a';}
+document.querySelectorAll('canvas.field').forEach(cv=>{
+  const x=cv.getContext('2d'),fx=+cv.dataset.fx,fy=+cv.dataset.fy,amp=+(cv.dataset.amp||1);
+  const N=50,rMin=28,rMax=1550;x.lineCap='round';
+  for(let i=0;i<N;i++){const p=i/(N-1),r=rMin+(rMax-rMin)*Math.pow(p,1.26),t=1-p;
+    x.beginPath();x.arc(fx,fy,r,0,Math.PI*2);x.strokeStyle=ramp(t);
+    x.globalAlpha=(0.12+0.4*Math.pow(1-p,1.6))*amp;x.lineWidth=r<440?1.5:1.1;x.stroke();}
+  const g=x.createRadialGradient(fx,fy,0,fx,fy,150);
+  g.addColorStop(0,'rgba(233,120,90,'+(0.4*amp)+')');g.addColorStop(.45,'rgba(31,182,163,'+(0.12*amp)+')');g.addColorStop(1,'transparent');
+  x.globalAlpha=1;x.fillStyle=g;x.beginPath();x.arc(fx,fy,150,0,Math.PI*2);x.fill();
+});
+window.__drawn=true;
+</script>
+</body>
+</html>

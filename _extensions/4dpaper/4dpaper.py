@@ -584,14 +584,19 @@ def main() -> None:
             # Re-theme the figure background so it matches the surrounding page neatly
             fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
 
-            # Export PNG for static PDF builds. Plotly auto-selects Kaleido when installed.
+            # Export PNG for static PDF builds — keep original width for a crisp raster.
             try:
                 pio.write_image(fig, out_png, format="png", scale=2)
             except Exception as e:
                 print(f"Warning: Could not export static PNG for plotly graph {fig_id}. (Kaleido issue). Error: {e}", file=sys.stderr)
 
+            # Make the HTML figure responsive: strip the hardcoded width so it
+            # fills whatever iframe/column width the page gives it, and let
+            # Plotly reflow on resize via config responsive=True.
+            fig.update_layout(autosize=True, width=None)
+
             # Export standalone HTML for interactive web
-            html_content = pio.to_html(fig, full_html=True, include_plotlyjs="cdn", config={'displayModeBar': False})
+            html_content = pio.to_html(fig, full_html=True, include_plotlyjs="cdn", config={'displayModeBar': False, 'responsive': True})
             
             # Plotly figures need their own camera relay because there is no vtk.js controls strip.
             inj_html = _plotly_camera_sync_snippet(fig_id)

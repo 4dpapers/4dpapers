@@ -1,0 +1,185 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  :root{
+    --ink:#0a0c14;--navy:#141725;--panel:#141828;
+    --teal:#1FB6A3;--teal-deep:#138a7c;
+    --text:#EAF0F2;--muted:#8b93a7;--faint:#5b6478;--line:#242c44;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:1920px;height:1080px;overflow:hidden;background:var(--ink)}
+  .stage{position:relative;width:1920px;height:1080px;
+    background:radial-gradient(1500px 1100px at 50% 42%, #14182a 0%, #0e1120 55%, #0a0c14 100%);
+    font-family:'Outfit',system-ui,sans-serif;}
+  #field{position:absolute;inset:0;opacity:.55}
+
+  .eyebrow{position:absolute;top:96px;left:0;width:1920px;text-align:center;
+    font-family:'JetBrains Mono',monospace;font-weight:500;font-size:20px;
+    letter-spacing:.42em;color:var(--teal);text-transform:uppercase;}
+
+  .grid{position:absolute;top:206px;left:150px;width:1620px;height:640px;
+    display:grid;grid-template-columns:1fr 2px 1fr;gap:0;align-items:center;}
+  .col{display:flex;flex-direction:column;align-items:center;padding:0 62px;text-align:center;}
+  .divider{position:relative;height:520px;background:linear-gradient(180deg,transparent,#2a3350 18%,#2a3350 82%,transparent);}
+  .vs{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    width:56px;height:56px;border-radius:50%;background:#0d1020;border:1px solid #2a3350;
+    display:flex;align-items:center;justify-content:center;
+    font-family:'JetBrains Mono',monospace;font-size:17px;color:var(--muted);letter-spacing:.05em;}
+
+  .nlabel{font-family:'JetBrains Mono',monospace;font-weight:500;font-size:18px;
+    letter-spacing:.30em;text-transform:uppercase;margin-bottom:38px;}
+  .col.old .nlabel{color:var(--faint)}
+  .col.new .nlabel{color:var(--teal)}
+  .art{min-height:290px;display:flex;align-items:center;justify-content:center;}
+  .cap{margin-top:40px;font-weight:300;font-size:25px;line-height:1.5;color:#b9c1d2;max-width:560px;}
+  .col.old .cap{color:#7b8398}
+  .cap b{font-weight:500}
+  .col.old .cap b{color:#aab2c4}
+  .col.new .cap b{color:#fff}
+
+  /* ---- hosted (old) graphic ---- */
+  .cloud svg{filter:drop-shadow(0 8px 20px #0008)}
+  .linkchip{margin-top:20px;display:inline-flex;align-items:center;gap:10px;
+    padding:9px 16px;border:1px dashed #3a445f;border-radius:9px;
+    font-family:'JetBrains Mono',monospace;font-size:15px;color:#6f7890;background:#0e1220;}
+
+  /* ---- file (new) graphic ---- */
+  .filewin{width:452px;border:1px solid #29314c;border-radius:15px;overflow:hidden;
+    background:linear-gradient(180deg,#151a2b,#0f121e);
+    box-shadow:0 34px 90px -34px #000, 0 0 66px -14px rgba(31,182,163,.30);}
+  .fbar{height:42px;display:flex;align-items:center;gap:8px;padding:0 16px;border-bottom:1px solid #222a40;background:#11152340;}
+  .fbar .d{width:10px;height:10px;border-radius:50%}
+  .fname{margin-left:12px;font-family:'JetBrains Mono',monospace;font-size:15px;color:#9aa3b8}
+  .fbody{padding:22px 24px 24px;display:flex;flex-direction:column;gap:13px}
+  .doc-h{font-weight:600;font-size:20px;color:#e7edf6;letter-spacing:-.01em}
+  .tline{height:7px;border-radius:4px;background:#232b42}
+  .eq{border:1px solid #29314c;border-radius:8px;background:#0d1120;
+     padding:11px 10px;font-family:'JetBrains Mono',monospace;font-size:16px;
+     color:#bfe9e0;text-align:center}
+  .figblk{border:1px solid #26314f;border-radius:10px;background:#0f1424;
+     padding:12px 15px;display:flex;align-items:center;gap:14px}
+  .figblk .txt{flex:1}
+  .figblk .fcap{font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.14em;
+     color:var(--faint);text-transform:uppercase}
+  .figblk .fmain{font-size:15px;color:#cdd5e4;margin-top:3px}
+  .play{width:0;height:0;border-left:14px solid var(--teal);
+     border-top:9px solid transparent;border-bottom:9px solid transparent}
+  .badges{margin-top:22px;display:flex;gap:12px;justify-content:center}
+  .badge{display:inline-flex;align-items:center;gap:8px;padding:9px 15px;border-radius:999px;
+    border:1px solid rgba(31,182,163,.35);background:rgba(31,182,163,.08);
+    font-family:'JetBrains Mono',monospace;font-size:14px;letter-spacing:.05em;color:#a9e6dc}
+
+  .takeaway{position:absolute;left:0;top:900px;width:1920px;text-align:center;
+    font-weight:300;font-size:52px;letter-spacing:-.01em;color:var(--text);}
+  .takeaway b{font-weight:600;color:var(--teal)}
+
+  .mk{position:absolute;font-family:'JetBrains Mono',monospace;color:var(--faint);
+    font-size:16px;letter-spacing:.24em}
+  .mk.bl{left:154px;bottom:52px;letter-spacing:.30em}
+  .mk.br{right:150px;bottom:52px}
+  .cross{position:absolute;width:15px;height:15px}
+  .cross:before,.cross:after{content:"";position:absolute;background:#37426b}
+  .cross:before{left:6.5px;top:0;width:2px;height:15px}
+  .cross:after{left:0;top:6.5px;width:15px;height:2px}
+</style>
+</head>
+<body>
+  <div class="stage">
+    <canvas id="field" width="1920" height="1080"></canvas>
+    <div class="cross" style="left:64px;top:64px"></div>
+    <div class="cross" style="right:64px;top:64px"></div>
+    <div class="eyebrow">Self-contained&nbsp;by&nbsp;design</div>
+
+    <div class="grid">
+      <!-- OLD: hosted -->
+      <div class="col old">
+        <div class="nlabel">Existing&nbsp;platforms</div>
+        <div class="art">
+          <div style="display:flex;flex-direction:column;align-items:center">
+            <svg class="cloud" width="188" height="130" viewBox="0 0 188 130" fill="none">
+              <path d="M52 96 A30 30 0 0 1 55 37 A38 38 0 0 1 128 34 A28 28 0 0 1 150 96 Z"
+                    stroke="#5b6478" stroke-width="2.4" stroke-linejoin="round"/>
+              <g stroke="#454e64" stroke-width="2" stroke-linecap="round">
+                <line x1="101" y1="96" x2="101" y2="116"/>
+              </g>
+              <!-- lock -->
+              <rect x="86" y="112" width="30" height="22" rx="4" stroke="#5b6478" stroke-width="2.2" fill="#0e1220"/>
+              <path d="M91 112 v-6 a10 10 0 0 1 20 0 v6" stroke="#5b6478" stroke-width="2.2"/>
+            </svg>
+            <div class="linkchip">app.xyz/view/8f2c… &nbsp;·&nbsp; login</div>
+          </div>
+        </div>
+        <div class="cap">The viewer lives on <b>their server</b>. You share a link — it needs internet, an account, and it rots.</div>
+      </div>
+
+      <div class="divider"><div class="vs">vs</div></div>
+
+      <!-- NEW: the file -->
+      <div class="col new">
+        <div class="nlabel">4Dpapers</div>
+        <div class="art">
+          <div style="display:flex;flex-direction:column;align-items:center">
+            <div class="filewin">
+              <div class="fbar">
+                <span class="d" style="background:#e0655b"></span>
+                <span class="d" style="background:#e0b24f"></span>
+                <span class="d" style="background:#4fbf7f"></span>
+                <span class="fname">paper.html</span>
+              </div>
+              <div class="fbody">
+                <div class="doc-h">3&nbsp;·&nbsp;Ventricular activation</div>
+                <div class="tline" style="width:100%"></div>
+                <div class="tline" style="width:94%"></div>
+                <div class="eq">∂Vₘ/∂t = ∇·(D∇Vₘ) − Iᵢₒₙ</div>
+                <div class="figblk">
+                  <svg width="54" height="54" viewBox="0 0 54 54" fill="none" stroke-width="1.6">
+                    <circle cx="27" cy="27" r="5.5" stroke="#a5122a"/>
+                    <circle cx="27" cy="27" r="11.5" stroke="#c98a44"/>
+                    <circle cx="27" cy="27" r="17.5" stroke="#1FB6A3"/>
+                    <circle cx="27" cy="27" r="23.5" stroke="#3b4cc0"/>
+                  </svg>
+                  <div class="txt">
+                    <div class="fcap">Figure 1 · live</div>
+                    <div class="fmain">rotate · play · switch field</div>
+                  </div>
+                  <div class="play"></div>
+                </div>
+                <div class="tline" style="width:70%"></div>
+              </div>
+            </div>
+            <div class="badges">
+              <span class="badge">any browser</span>
+              <span class="badge">offline</span>
+              <span class="badge">email · USB</span>
+            </div>
+          </div>
+        </div>
+        <div class="cap">Your <b>whole paper</b> — writing, math, and live figures — in one file. Opens anywhere, offline, forever.</div>
+      </div>
+    </div>
+
+    <div class="takeaway">A <b>document</b>, not a dependency.</div>
+
+    <div class="mk bl">FIG.03 — THE ARTIFACT</div>
+    <div class="mk br">ISOCHRONE · 4D FIELD</div>
+  </div>
+
+<script>
+function lerp(a,b,t){return a+(b-a)*t}
+function hex(c){c=c.replace('#','');return [parseInt(c.slice(0,2),16),parseInt(c.slice(2,4),16),parseInt(c.slice(4,6),16)]}
+function ramp(t){const stops=[[0,'#243a86'],[0.34,'#138a7c'],[0.62,'#c98a44'],[1,'#a5122a']];
+  for(let i=0;i<stops.length-1;i++){if(t<=stops[i+1][0]){const [t0,c0]=stops[i],[t1,c1]=stops[i+1];
+    const k=(t-t0)/(t1-t0),A=hex(c0),B=hex(c1);
+    return `rgb(${Math.round(lerp(A[0],B[0],k))},${Math.round(lerp(A[1],B[1],k))},${Math.round(lerp(A[2],B[2],k))})`;}}return '#a5122a';}
+const cv=document.getElementById('field'),x=cv.getContext('2d');
+// faint symmetric field, low presence — this card is a diagram
+const fx=960,fy=452,N=52,rMin=60,rMax=1500;x.lineCap='round';
+for(let i=0;i<N;i++){const p=i/(N-1),r=rMin+(rMax-rMin)*Math.pow(p,1.15),t=1-p;
+  x.beginPath();x.arc(fx,fy,r,0,Math.PI*2);x.strokeStyle=ramp(t);
+  x.globalAlpha=0.05+0.10*Math.pow(1-p,1.5);x.lineWidth=1;x.stroke();}
+window.__drawn=true;
+</script>
+</body>
+</html>
