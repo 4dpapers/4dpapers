@@ -2,7 +2,7 @@
 
 Date: 2026-09-14
 Status: Approved for planning
-Releases: v1.0.3 → v1.1 → v1.2 → v1.3 → v2
+Releases: v0.1.3 → v0.1.4 → v0.1.5 → v0.1.6 → v0.2.0
 
 ## 1. Goal
 
@@ -170,7 +170,7 @@ Depends on: `readers/`, pyvista, jinja2.
 ### 4.3 `publish/`
 
 Quarto orchestration: profile selection, render invocation, output validation,
-template injection, signing. This is where the v1.1 LaTeX export lands properly.
+template injection, signing. This is where the v0.1.4 LaTeX export lands properly.
 `compile_plugin.py` is 557 lines today largely because it *is* the publish layer
 wearing an HTTP costume.
 
@@ -208,7 +208,7 @@ Behaviour change and structure change never occur in the same release.
 
 Work ships in PR-sized batches, one reviewable idea each, CI green per PR.
 
-### v1.0.3 — Land what is already built
+### v0.1.3 — Land what is already built
 
 The four in-flight features, released ahead of the test rebuild so finished work
 is not held behind it.
@@ -220,9 +220,9 @@ is not held behind it.
 | 3 | Land live file sync **and its first tests** (0% today) |
 | 4 | Land LaTeX PDF export **and `export_templates` tests** (0% today) |
 
-Tag **v1.0.3**.
+Tag **v0.1.3**.
 
-### v1.1 — Foundation and honest tests
+### v0.1.4 — Foundation and honest tests
 
 No module moves. No restructuring. No behaviour change except fidelity fixes.
 
@@ -243,21 +243,21 @@ fix is demonstrated rather than asserted).
 PR 10 is deliberately a red build. A harness that passes on first run has not
 been shown to detect anything.
 
-Tag **v1.1** — the frozen behavioural baseline for every later release.
+Tag **v0.1.4** — the frozen behavioural baseline for every later release.
 
-### v1.2 — Backend modules, lower risk
+### v0.1.5 — Backend modules, lower risk
 
 `readers/`, `publish/`, `server/`, each with a declared contract and no private
-cross-imports. Tag **v1.2**.
+cross-imports. Tag **v0.1.5**.
 
-### v1.3 — Render pipeline
+### v0.1.6 — Render pipeline
 
 `figures/` alone: kind registry, templates out of Python strings, public API
 replacing the ~40 cross-imported private names. Isolated because this layer
 broke once before, and because a regression here must be bisectable.
-Tag **v1.3**.
+Tag **v0.1.6**.
 
-### v2 — Frontend seam
+### v0.2.0 — Frontend seam
 
 Extract `index.html`'s 1662 inline JS lines alongside the twelve modules already
 present. Formalize the postMessage protocol. Preserve behaviour.
@@ -280,7 +280,7 @@ Work is assigned by how much judgment it needs, not by size:
 
 ## 8. Acceptance
 
-Every release ends with the v1.1 fidelity suite green. "We did not lose what
+Every release ends with the v0.1.4 fidelity suite green. "We did not lose what
 works today" is a command that can be run, not a hope.
 
 Per-release gates:
