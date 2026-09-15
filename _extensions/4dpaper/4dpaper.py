@@ -17,46 +17,30 @@ except ImportError:
     pass
 
 _here = Path(__file__).resolve()
-sys.path.insert(0, str(_here.parent))
-from lib.config import _project_root, _app_root, ShortcutResolver, _shortcut_resolver, _shortcuts_yml_path
 
-for _path in (_app_root, _project_root):
-    if _path is not None and str(_path) not in sys.path:
-        sys.path.insert(0, str(_path))
-
-from lib.utils import resolve_src_path, is_cache_valid, _maybe_sign_output_html
-_venv_python = _project_root / ".venv" / "bin" / "python"
-_under_pytest = "pytest" in sys.modules or any("pytest" in a for a in sys.argv)
-if (
-    _venv_python.exists()
-    and not _under_pytest
-    and Path(sys.executable).resolve() != _venv_python.resolve()
-):
-    # Safety: assert the resolved venv python lives inside the project root before
-    # handing control to it.  Prevents a crafted PROJECT_ROOT env var from
-    # redirecting execv to an arbitrary binary.
-    _venv_resolved = _venv_python.resolve()
-    _root_resolved = _project_root.resolve()
-    if _venv_resolved.is_relative_to(_root_resolved):
-        os.execv(str(_venv_python), [str(_venv_python)] + sys.argv)
-    else:
-        print(
-            f"WARNING: venv python '{_venv_resolved}' is outside project root "
-            f"'{_root_resolved}' — skipping execv re-launch for safety.",
-            file=sys.stderr,
+try:
+    from fourdpaper.lib.config import _project_root, _app_root, ShortcutResolver, _shortcut_resolver, _shortcuts_yml_path
+except ModuleNotFoundError as _exc:
+    if _exc.name == "fourdpaper" or (_exc.name or "").startswith("fourdpaper."):
+        sys.exit(
+            "4dpaper.py: cannot import the 'fourdpaper' package "
+            f"({_exc}).\n\n"
+            "This pre-render hook requires the project to be installed as a\n"
+            "package (it is no longer added to sys.path automatically). From\n"
+            "the project root, with the project's virtualenv active, run:\n\n"
+            "    pip install -e .\n"
         )
+    raise
 
-
-
+from fourdpaper.lib.utils import resolve_src_path, is_cache_valid, _maybe_sign_output_html
 from dashboard.document_signing import sign_html_file_if_configured
-sys.path.insert(0, str(_here.parent))
-from lib.parser import parse_graph_panel_shortcodes, parse_graph_shortcodes, parse_panel_shortcodes, parse_shortcodes, parse_video_shortcodes, parse_multi_image_shortcodes, parse_timeseries_shortcodes
-from lib.mesh import _rdp_simplify_xy, _get_overlay_at_time, _prepare_surface, _decimate_quadric, _surface_cell_count, _decimate_surface, _has_polygon_cells, _add_mesh_auto, _apply_decimation, _merge_overlay_mesh
-from lib.utils import is_cache_valid, resolve_src_path, _maybe_sign_output_html
-from lib.render import generate_multi_image_png, generate_png_figure, generate_panel_html, generate_multi_image_html, generate_panel_png, generate_video_figure, generate_html_figure
-from lib.frontend import _controls_strip_snippet, _build_video_html_fragment, _multi_actor_extension_snippet, _build_multi_image_sources, _timeseries_sync_snippet, _plotly_camera_sync_snippet
-from lib.state import _apply_camera_from_dict, apply_camera_state, load_styles, _load_saved_field_state, resolve_style
-from lib.timeseries import _expand_timeseries_steps, _nearest_time_idx
+from fourdpaper.lib.parser import parse_graph_panel_shortcodes, parse_graph_shortcodes, parse_panel_shortcodes, parse_shortcodes, parse_video_shortcodes, parse_multi_image_shortcodes, parse_timeseries_shortcodes
+from fourdpaper.lib.mesh import _rdp_simplify_xy, _get_overlay_at_time, _prepare_surface, _decimate_quadric, _surface_cell_count, _decimate_surface, _has_polygon_cells, _add_mesh_auto, _apply_decimation, _merge_overlay_mesh
+from fourdpaper.lib.utils import is_cache_valid, resolve_src_path, _maybe_sign_output_html
+from fourdpaper.lib.render import generate_multi_image_png, generate_png_figure, generate_panel_html, generate_multi_image_html, generate_panel_png, generate_video_figure, generate_html_figure
+from fourdpaper.lib.frontend import _controls_strip_snippet, _build_video_html_fragment, _multi_actor_extension_snippet, _build_multi_image_sources, _timeseries_sync_snippet, _plotly_camera_sync_snippet
+from fourdpaper.lib.state import _apply_camera_from_dict, apply_camera_state, load_styles, _load_saved_field_state, resolve_style
+from fourdpaper.lib.timeseries import _expand_timeseries_steps, _nearest_time_idx
 
 
 
