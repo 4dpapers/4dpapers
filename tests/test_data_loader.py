@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import numpy as np
 import pytest
 
 pyvista = pytest.importorskip("pyvista", reason="pyvista not installed")
@@ -383,7 +384,12 @@ class TestReaderLoaders:
 
 
 class TestMeshioLoaders:
-    """HDF5, MED, MSH: use meshio (lazy import) via _read_via_meshio helper."""
+    """MED, MSH, Abaqus .inp: use meshio (lazy import) via _read_via_meshio helper.
+
+    `.hdf5` is deliberately excluded here -- it reads directly via h5py
+    (see TestHdf5Loader below), not through meshio. meshio has no reader
+    that recognizes a plain `.hdf5` extension.
+    """
 
     def _make_sim(self, suffix):
         sim = SimulationData.__new__(SimulationData)
@@ -398,7 +404,6 @@ class TestMeshioLoaders:
         return sim
 
     @pytest.mark.parametrize("suffix,method,fmt", [
-        (".hdf5", "load_hdf5",      "hdf5"),
         (".med",  "load_med",       "med"),
         (".msh",  "load_msh",       "msh"),
         (".inp",  "load_abaqus_inp","abaqus_inp"),
@@ -416,10 +421,110 @@ class TestMeshioLoaders:
 
     def test_missing_meshio_raises_import_error(self):
         """If meshio is not installed, a clear ImportError with install hint is raised."""
-        sim = self._make_sim(".hdf5")
+        sim = self._make_sim(".med")
         with patch.dict("sys.modules", {"meshio": None}):
             with pytest.raises(ImportError, match="pip install meshio"):
+                sim.load_med()
+
+
+class TestHdf5Loader:
+    """`.hdf5` reads directly via h5py -- see load_hdf5's docstring for why
+    it cannot go through meshio (meshio has no generic HDF5 reader; it
+    only recognizes specific registered layouts like MOAB's `.h5m`).
+    """
+
+    def _make_sim(self, case_path):
+        sim = SimulationData.__new__(SimulationData)
+        sim.case_path = case_path
+        sim._meshes = {}
+        sim._time_steps = []
+        sim._reader = None
+        sim._format = None
+        sim._is_decomposed = False
+        sim._proc_readers = []
+        sim._proc_foam_files = []
+        return sim
+
+    def test_missing_h5py_raises_import_error(self):
+        """If h5py is not installed, a clear ImportError with install hint is raised."""
+        sim = self._make_sim(Path("dummy.hdf5"))
+        with patch.dict("sys.modules", {"h5py": None}):
+            with pytest.raises(ImportError, match="pip install h5py"):
                 sim.load_hdf5()
+
+    def test_missing_points_dataset_raises_value_error(self, tmp_path):
+        h5py = pytest.importorskip("h5py", reason="h5py not installed")
+        path = tmp_path / "no_points.hdf5"
+        with h5py.File(path, "w") as f:
+            f.create_dataset("other", data=[1, 2, 3])
+        sim = self._make_sim(path)
+        with pytest.raises(ValueError, match="points"):
+            sim.load_hdf5()
+
+    def test_zero_row_points_raises_value_error(self, tmp_path):
+        """A `points` dataset with zero rows cannot describe a mesh -- it must
+        raise rather than silently produce an empty mesh (n_points == 0)."""
+        h5py = pytest.importorskip("h5py", reason="h5py not installed")
+        path = tmp_path / "empty_points.hdf5"
+        with h5py.File(path, "w") as f:
+            f.create_dataset("points", data=np.empty((0, 3)))
+        sim = self._make_sim(path)
+        with pytest.raises(ValueError, match="empty"):
+            sim.load_hdf5()
+
+    def test_1d_points_raises_value_error(self, tmp_path):
+        """A `points` dataset that isn't 2-D must raise the project's own
+        clear message, not PyVista's internal shape error."""
+        h5py = pytest.importorskip("h5py", reason="h5py not installed")
+        path = tmp_path / "flat_points.hdf5"
+        with h5py.File(path, "w") as f:
+            f.create_dataset("points", data=[0.0, 0.0, 0.0])
+        sim = self._make_sim(path)
+        with pytest.raises(ValueError, match="must have shape"):
+            sim.load_hdf5()
+
+    def test_wrong_column_count_points_raises_value_error(self, tmp_path):
+        """A `points` dataset with 2 columns instead of 3 must raise the
+        project's own clear message, not PyVista's internal shape error."""
+        h5py = pytest.importorskip("h5py", reason="h5py not installed")
+        path = tmp_path / "two_col_points.hdf5"
+        with h5py.File(path, "w") as f:
+            f.create_dataset("points", data=[[0.0, 0.0], [1.0, 1.0]])
+        sim = self._make_sim(path)
+        with pytest.raises(ValueError, match="must have shape"):
+            sim.load_hdf5()
+
+    def test_loads_points_dataset_as_point_cloud(self, tmp_path):
+        h5py = pytest.importorskip("h5py", reason="h5py not installed")
+        pts = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0]]
+        path = tmp_path / "cloud.hdf5"
+        with h5py.File(path, "w") as f:
+            f.create_dataset("points", data=pts)
+        sim = self._make_sim(path)
+        sim.load_hdf5()
+        assert sim.time_steps == [0]
+        mesh = sim.get_mesh(0)
+        assert mesh.n_points == 3
+        assert sim._format == "hdf5"
+
+    def test_attaches_matching_datasets_as_point_data_fields(self, tmp_path):
+        """Top-level datasets whose first dimension matches the point count
+        are attached as point-data fields, named after the dataset. A
+        dataset whose first dimension does not match is silently skipped."""
+        h5py = pytest.importorskip("h5py", reason="h5py not installed")
+        pts = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0]]
+        path = tmp_path / "fielded.hdf5"
+        with h5py.File(path, "w") as f:
+            f.create_dataset("points", data=pts)
+            f.create_dataset("temperature", data=[300.0, 310.0, 320.0])
+            f.create_dataset("unrelated", data=[[0.0] * 5] * 100)
+        sim = self._make_sim(path)
+        sim.load_hdf5()
+        mesh = sim.get_mesh(0)
+        assert mesh.n_points == 3
+        assert "temperature" in mesh.point_data
+        assert list(mesh.point_data["temperature"]) == [300.0, 310.0, 320.0]
+        assert "unrelated" not in mesh.point_data
 
 
 # ── Integration tests with real files ─────────────────────────────────────
@@ -530,12 +635,23 @@ class TestRealFiles:
             pytest.skip(f"MED fixture not loadable in this environment: {exc}")
 
     def test_hdf5(self):
+        """The fixture carries points plus per-point 'temperature' and
+        'pressure' fields; both must surface as scalar fields, not just
+        the point cloud."""
         try:
-            self._assert_mesh_ok(self._load("test_data.hdf5"))
+            sim = self._load("test_data.hdf5")
+            self._assert_mesh_ok(sim)
         except ImportError as exc:
             pytest.skip(str(exc))
         except Exception as exc:
             pytest.skip(f"HDF5 fixture not loadable in this environment: {exc}")
+            return
+        mesh = sim.get_mesh(0)
+        assert mesh.n_points == 8
+        assert "temperature" in mesh.point_data
+        assert "pressure" in mesh.point_data
+        assert "temperature" in sim.fields
+        assert "pressure" in sim.fields
 
 
 class TestDecomposedRelativePathStaging:

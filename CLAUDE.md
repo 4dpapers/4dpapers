@@ -323,8 +323,10 @@ Use this status split when writing docs, release notes, or user-facing support c
 |--------|-----------|-------------|---------------|-------|
 | **Gmsh** | `.msh` | NO | YES | Versions 2.2, 4.1+ supported; tags and physical regions preserved |
 | **Salome MED** | `.med` | MAYBE | YES | Multi-physics pre/post-processing format |
-| **HDF5 (Generic)** | `.hdf5` | CONDITIONAL | YES | `.h5` extension reserved for FLUENT CFF reader; use `.hdf5` for generic HDF5 |
+| **HDF5 (Generic)** | `.hdf5` | NO | YES | `.h5` extension reserved for FLUENT CFF reader; use `.hdf5` for generic HDF5. Read directly via h5py, not meshio (no fixed schema) |
 | **Abaqus Mesh** | `.inp` | NO | NO | **Mesh topology only** (not `.odb` output databases); geometry import only |
+
+**Generic HDF5 layout:** A `.hdf5` file is expected to contain a top-level `points` dataset of shape `(N, 3)`, plus any other top-level datasets whose first dimension is `N` — each such dataset is attached as a point-data scalar field, named after the dataset. Datasets whose first dimension does not equal `N` are skipped. There is no time-series support; the file always loads as a single static point cloud.
 
 ### 6.6 Visualization & Data Formats
 
@@ -362,7 +364,8 @@ The upload handler also accepts for staging/documentation:
 - **pyvista[jupyter]==0.47.3** — Primary mesh I/O & rendering (VTK wrapper)
 - **vtk==9.6.1** — Backend; pinned for `window.renderWindow` vtk.js export stability
 - **numpy** — Array operations for scalar field manipulation
-- **meshio** — Bundled in the official image; enables `.med`, `.msh`, `.inp`, `.hdf5` support
+- **meshio** — Bundled in the official image; enables `.med`, `.msh`, `.inp` support
+- **h5py** — Direct reader for generic `.hdf5` point-cloud files (not routed through meshio; see §6.5)
 - **plotly>=5.0.0** — Graph rendering
 
 ### 6.10 Size & Performance Constraints

@@ -60,7 +60,8 @@ def main() -> None:
 
         with h5py.File("test_data.hdf5", "w") as f:
             f.create_dataset("points", data=POINTS)
-            f.create_dataset("field_data", data=np.random.default_rng(0).random((100, 100)))
+            f.create_dataset("temperature", data=np.linspace(300.0, 400.0, len(POINTS)))
+            f.create_dataset("pressure", data=np.linspace(1.0, 2.0, len(POINTS)))
         print("Created test_data.hdf5")
     except ImportError:
         print("Skipping HDF5 (h5py not installed)")
