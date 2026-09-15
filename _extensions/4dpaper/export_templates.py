@@ -386,19 +386,15 @@ iframe, .fourd-figure iframe {
 def _sanitise_custom_css(css: str) -> str:
     r"""Prevent custom CSS from closing its <style> block.
 
-    `</style>` inside a style element ends it, so anything after becomes
-    live markup in a document that gets shared with reviewers -- e.g.
-    `</style><script>...`. Neutralising only `</style` leaves that
-    trailing markup sitting in the output as inert text, which is enough
-    to stop it from ever being parsed as a live tag, but the payload
-    string is still there. Escape *any* HTML closing-tag opener the same
-    way (`</style` -> `<\/style`, `</script` -> `<\/script`, ...) so no
-    injected closing tag -- for `<style>` or anything else -- survives
-    verbatim in the output.
+    Only `</style>` can terminate a style element. Escaping it to
+    `<\/style` means any markup the author pasted after it stays inside
+    the element as inert CSS text rather than becoming live markup in a
+    document that gets shared with reviewers.
+
+    The escaped text is still visible in the source; that is fine. What
+    matters is that the element is never closed early.
     """
-    return re.sub(
-        r"</\s*([A-Za-z][A-Za-z0-9]*)", r"<\\/\1", css, flags=re.IGNORECASE
-    )
+    return re.sub(r"</\s*style", r"<\\/style", css, flags=re.IGNORECASE)
 
 
 def apply_template(

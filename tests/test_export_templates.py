@@ -62,16 +62,31 @@ def test_unknown_template_name_is_rejected():
                            template="no-such-template")
 
 
-def test_custom_css_cannot_escape_the_style_block():
-    """Exported documents get shared; custom CSS must not inject markup."""
+def test_custom_css_cannot_close_its_style_block():
+    """The threat is closing <style> early, not the presence of text.
+
+    Escaped markup left inside the element is inert CSS. What must never
+    happen is the element terminating, which would make everything after
+    it live markup in a document shared with reviewers.
+    """
     mod = _load()
     out = mod.apply_template(
         "<html><head></head><body></body></html>",
         template="modern",
         custom_css="body{color:red}</style><script>alert(1)</script>",
     )
-    assert "<script>alert(1)</script>" not in out
-    assert "</style><script>" not in out
+    custom_start = out.index('id="fourd-template-custom"')
+    # The first `</style>` after the custom block opens must be the one
+    # the template itself emits, not one smuggled in by the author.
+    injected = out[custom_start:]
+    assert "<\\/style" in injected, "the author's closing tag was not escaped"
+    body_before_close = injected[: injected.index("</style>")]
+    assert "<script>" not in body_before_close or "<\\/style" in body_before_close
+    # And the document must not contain an unescaped author-supplied close
+    # that precedes the template's own.
+    assert injected.count("</style>") == 1, (
+        "custom CSS closed the style block early"
+    )
 
 
 def test_apply_template_includes_custom_css_when_given():
