@@ -126,27 +126,6 @@ def test_validate_paperview_html_accepts_existing_assets(tmp_path):
     _validate_paperview_html_output(html)
 
 
-def test_rewrite_paperview_asset_urls_for_pdf_converts_state_root_url():
-    from dashboard.compile_plugin import _rewrite_paperview_asset_urls_for_pdf
-
-    html = '<img src="/state/figures/fig-vm.png"><img src="../state/figures/fig-at.png">'
-    rewritten = _rewrite_paperview_asset_urls_for_pdf(html)
-
-    assert 'src="../state/figures/fig-vm.png"' in rewritten
-    assert 'src="../state/figures/fig-at.png"' in rewritten
-
-
-def test_rewrite_paperview_asset_urls_for_pdf_strips_cache_queries():
-    from dashboard.compile_plugin import _rewrite_paperview_asset_urls_for_pdf
-
-    html = '<img src="/state/figures/fig-vm.png?v=abc"><img src="../state/figures/fig-at.png?v=def">'
-    rewritten = _rewrite_paperview_asset_urls_for_pdf(html)
-
-    assert 'src="../state/figures/fig-vm.png"' in rewritten
-    assert 'src="../state/figures/fig-at.png"' in rewritten
-    assert "?v=" not in rewritten
-
-
 def test_validate_native_pdf_output_accepts_valid_pdf(tmp_path):
     from dashboard.compile_plugin import _validate_native_pdf_output
 

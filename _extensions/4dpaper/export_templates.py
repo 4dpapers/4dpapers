@@ -383,6 +383,24 @@ iframe, .fourd-figure iframe {
 """
 
 
+def _sanitise_custom_css(css: str) -> str:
+    r"""Prevent custom CSS from closing its <style> block.
+
+    `</style>` inside a style element ends it, so anything after becomes
+    live markup in a document that gets shared with reviewers -- e.g.
+    `</style><script>...`. Neutralising only `</style` leaves that
+    trailing markup sitting in the output as inert text, which is enough
+    to stop it from ever being parsed as a live tag, but the payload
+    string is still there. Escape *any* HTML closing-tag opener the same
+    way (`</style` -> `<\/style`, `</script` -> `<\/script`, ...) so no
+    injected closing tag -- for `<style>` or anything else -- survives
+    verbatim in the output.
+    """
+    return re.sub(
+        r"</\s*([A-Za-z][A-Za-z0-9]*)", r"<\\/\1", css, flags=re.IGNORECASE
+    )
+
+
 def apply_template(
     html: str,
     *,
@@ -411,7 +429,11 @@ def apply_template(
         Modified HTML string.
     """
     # Resolve CSS
-    preset_css = TEMPLATES.get(template, TEMPLATES["academic"])
+    if template not in TEMPLATES:
+        raise ValueError(
+            f"unknown template {template!r}; expected one of {sorted(TEMPLATES)}"
+        )
+    preset_css = TEMPLATES[template]
 
     parts = [
         f'<style id="fourd-template-preset">\n{preset_css}\n</style>',
@@ -419,7 +441,7 @@ def apply_template(
     ]
 
     if custom_css and custom_css.strip():
-        parts.append(f'<style id="fourd-template-custom">\n{custom_css}\n</style>')
+        parts.append(f'<style id="fourd-template-custom">\n{_sanitise_custom_css(custom_css)}\n</style>')
 
     injected_css = '\n'.join(parts)
 

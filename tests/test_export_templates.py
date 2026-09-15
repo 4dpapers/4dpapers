@@ -54,11 +54,24 @@ def test_apply_template_injects_preset_before_head_close():
     assert out.index('id="fourd-template-preset"') < out.index("</head>")
 
 
-def test_apply_template_falls_back_to_academic_for_unknown_name():
+def test_unknown_template_name_is_rejected():
+    """Silent fallback hides a typo in a published document's styling."""
     mod = _load()
-    html = "<html><head></head><body></body></html>"
-    out = mod.apply_template(html, template="no-such-template")
-    assert mod.TEMPLATES["academic"] in out
+    with pytest.raises(ValueError, match="unknown template"):
+        mod.apply_template("<html><head></head><body></body></html>",
+                           template="no-such-template")
+
+
+def test_custom_css_cannot_escape_the_style_block():
+    """Exported documents get shared; custom CSS must not inject markup."""
+    mod = _load()
+    out = mod.apply_template(
+        "<html><head></head><body></body></html>",
+        template="modern",
+        custom_css="body{color:red}</style><script>alert(1)</script>",
+    )
+    assert "<script>alert(1)</script>" not in out
+    assert "</style><script>" not in out
 
 
 def test_apply_template_includes_custom_css_when_given():

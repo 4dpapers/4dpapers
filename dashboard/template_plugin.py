@@ -172,7 +172,10 @@ class TemplateExportHandler(SecureMixin, tornado.web.RequestHandler):
         # ── Apply template ───────────────────────────────────────────────────
         template_name = body.get("template", "academic")
         if template_name not in TEMPLATES:
-            template_name = "academic"
+            self.set_status(400)
+            self.set_header("Content-Type", "application/json")
+            self.write({"error": f"Unknown template {template_name!r}; expected one of {sorted(TEMPLATES)}"})
+            return
 
         custom_css = body.get("custom_css") or None
         add_index = bool(body.get("add_index", False))
