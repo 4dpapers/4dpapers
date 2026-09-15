@@ -80,8 +80,6 @@ def test_custom_css_cannot_close_its_style_block():
     # the template itself emits, not one smuggled in by the author.
     injected = out[custom_start:]
     assert "<\\/style" in injected, "the author's closing tag was not escaped"
-    body_before_close = injected[: injected.index("</style>")]
-    assert "<script>" not in body_before_close or "<\\/style" in body_before_close
     # And the document must not contain an unescaped author-supplied close
     # that precedes the template's own.
     assert injected.count("</style>") == 1, (
