@@ -54,11 +54,37 @@ def test_apply_template_injects_preset_before_head_close():
     assert out.index('id="fourd-template-preset"') < out.index("</head>")
 
 
-def test_apply_template_falls_back_to_academic_for_unknown_name():
+def test_unknown_template_name_is_rejected():
+    """Silent fallback hides a typo in a published document's styling."""
     mod = _load()
-    html = "<html><head></head><body></body></html>"
-    out = mod.apply_template(html, template="no-such-template")
-    assert mod.TEMPLATES["academic"] in out
+    with pytest.raises(ValueError, match="unknown template"):
+        mod.apply_template("<html><head></head><body></body></html>",
+                           template="no-such-template")
+
+
+def test_custom_css_cannot_close_its_style_block():
+    """The threat is closing <style> early, not the presence of text.
+
+    Escaped markup left inside the element is inert CSS. What must never
+    happen is the element terminating, which would make everything after
+    it live markup in a document shared with reviewers.
+    """
+    mod = _load()
+    out = mod.apply_template(
+        "<html><head></head><body></body></html>",
+        template="modern",
+        custom_css="body{color:red}</style><script>alert(1)</script>",
+    )
+    custom_start = out.index('id="fourd-template-custom"')
+    # The first `</style>` after the custom block opens must be the one
+    # the template itself emits, not one smuggled in by the author.
+    injected = out[custom_start:]
+    assert "<\\/style" in injected, "the author's closing tag was not escaped"
+    # And the document must not contain an unescaped author-supplied close
+    # that precedes the template's own.
+    assert injected.count("</style>") == 1, (
+        "custom CSS closed the style block early"
+    )
 
 
 def test_apply_template_includes_custom_css_when_given():

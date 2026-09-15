@@ -187,20 +187,6 @@ def _validate_paperview_html_output(html_path: Path) -> None:
         )
 
 
-def _rewrite_paperview_asset_urls_for_pdf(html_text: str) -> str:
-    """Convert app-root `/state/...` asset URLs to project-relative paths for WeasyPrint."""
-    html_text = re.sub(
-        r'src="/state/figures/([^"?]+)(?:\?[^"]*)?"',
-        r'src="../state/figures/\1"',
-        html_text,
-    )
-    return re.sub(
-        r'src="(\.\./state/figures/[^"?]+)(?:\?[^"]*)?"',
-        r'src="\1"',
-        html_text,
-    )
-
-
 def _validate_native_pdf_output(pdf_path: Path) -> None:
     """Ensure Quarto's native PDF output is present and plausibly valid."""
     if not pdf_path.exists():

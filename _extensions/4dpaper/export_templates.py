@@ -383,6 +383,20 @@ iframe, .fourd-figure iframe {
 """
 
 
+def _sanitise_custom_css(css: str) -> str:
+    r"""Prevent custom CSS from closing its <style> block.
+
+    Only `</style>` can terminate a style element. Escaping it to
+    `<\/style` means any markup the author pasted after it stays inside
+    the element as inert CSS text rather than becoming live markup in a
+    document that gets shared with reviewers.
+
+    The escaped text is still visible in the source; that is fine. What
+    matters is that the element is never closed early.
+    """
+    return re.sub(r"</\s*style", r"<\\/style", css, flags=re.IGNORECASE)
+
+
 def apply_template(
     html: str,
     *,
@@ -411,7 +425,11 @@ def apply_template(
         Modified HTML string.
     """
     # Resolve CSS
-    preset_css = TEMPLATES.get(template, TEMPLATES["academic"])
+    if template not in TEMPLATES:
+        raise ValueError(
+            f"unknown template {template!r}; expected one of {sorted(TEMPLATES)}"
+        )
+    preset_css = TEMPLATES[template]
 
     parts = [
         f'<style id="fourd-template-preset">\n{preset_css}\n</style>',
@@ -419,7 +437,7 @@ def apply_template(
     ]
 
     if custom_css and custom_css.strip():
-        parts.append(f'<style id="fourd-template-custom">\n{custom_css}\n</style>')
+        parts.append(f'<style id="fourd-template-custom">\n{_sanitise_custom_css(custom_css)}\n</style>')
 
     injected_css = '\n'.join(parts)
 
