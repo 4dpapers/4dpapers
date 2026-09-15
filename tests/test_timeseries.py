@@ -22,13 +22,7 @@ def _load_4dpaper():
 
 
 def _load_frontend():
-    spec = importlib.util.spec_from_file_location(
-        "fourd_frontend",
-        Path(__file__).parent.parent / "_extensions" / "4dpaper" / "lib" / "frontend.py",
-    )
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+    return importlib.import_module("lib.frontend")
 
 
 def _load_render():

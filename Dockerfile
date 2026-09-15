@@ -57,10 +57,16 @@ COPY _extensions /app/_extensions
 COPY scripts /app/scripts
 COPY serve.py /app/serve.py
 COPY VERSION /app/VERSION
+COPY pyproject.toml /app/pyproject.toml
 COPY _quarto-apphtml.yml /app/_quarto-apphtml.yml
 COPY _quarto-paperview.yml /app/_quarto-paperview.yml
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
+
+# Install the project itself as an editable package so `fourdpaper`,
+# `dashboard`, and `scripts` are importable without sys.path surgery — the
+# Quarto pre-render hook (4dpaper.py) requires this.
+RUN pip install --no-cache-dir -e /app
 
 # Create project volume mount point
 WORKDIR /workspace

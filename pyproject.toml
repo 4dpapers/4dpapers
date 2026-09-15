@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fourdpapers"
+dynamic = ["version"]
+description = "Paper authoring IDE with interactive 3D figures"
+requires-python = ">=3.11"
+
+[tool.setuptools.dynamic]
+version = { file = "VERSION" }
+
+[tool.setuptools]
+# The library lives under a directory whose name starts with a digit, so it
+# cannot be imported by its own path. Map it to an importable name rather
+# than moving it — module moves belong to Phase 2.
+package-dir = { fourdpaper = "_extensions/4dpaper", dashboard = "dashboard", scripts = "scripts" }
+packages = ["fourdpaper", "fourdpaper.lib", "dashboard", "scripts"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+warn_unused_ignores = true
