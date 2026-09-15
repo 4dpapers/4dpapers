@@ -364,7 +364,8 @@ The upload handler also accepts for staging/documentation:
 - **pyvista[jupyter]==0.47.3** — Primary mesh I/O & rendering (VTK wrapper)
 - **vtk==9.6.1** — Backend; pinned for `window.renderWindow` vtk.js export stability
 - **numpy** — Array operations for scalar field manipulation
-- **meshio** — Bundled in the official image; enables `.med`, `.msh`, `.inp`, `.hdf5` support
+- **meshio** — Bundled in the official image; enables `.med`, `.msh`, `.inp` support
+- **h5py** — Direct reader for generic `.hdf5` point-cloud files (not routed through meshio; see §6.5)
 - **plotly>=5.0.0** — Graph rendering
 
 ### 6.10 Size & Performance Constraints

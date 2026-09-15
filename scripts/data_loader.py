@@ -394,6 +394,15 @@ class SimulationData:
                     "cannot interpret as a generic HDF5 mesh."
                 )
             points = np.asarray(f["points"])
+            if points.ndim != 2 or points.shape[1] != 3:
+                raise ValueError(
+                    f"'{self.case_path}': 'points' must have shape (N, 3), "
+                    f"got {points.shape}."
+                )
+            if points.shape[0] == 0:
+                raise ValueError(
+                    f"'{self.case_path}': 'points' is empty; nothing to render."
+                )
             fields = {}
             for name, node in f.items():
                 if name == "points" or not isinstance(node, h5py.Dataset):

@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import numpy as np
 import pytest
 
 pyvista = pytest.importorskip("pyvista", reason="pyvista not installed")
@@ -458,6 +459,39 @@ class TestHdf5Loader:
             f.create_dataset("other", data=[1, 2, 3])
         sim = self._make_sim(path)
         with pytest.raises(ValueError, match="points"):
+            sim.load_hdf5()
+
+    def test_zero_row_points_raises_value_error(self, tmp_path):
+        """A `points` dataset with zero rows cannot describe a mesh -- it must
+        raise rather than silently produce an empty mesh (n_points == 0)."""
+        h5py = pytest.importorskip("h5py", reason="h5py not installed")
+        path = tmp_path / "empty_points.hdf5"
+        with h5py.File(path, "w") as f:
+            f.create_dataset("points", data=np.empty((0, 3)))
+        sim = self._make_sim(path)
+        with pytest.raises(ValueError, match="empty"):
+            sim.load_hdf5()
+
+    def test_1d_points_raises_value_error(self, tmp_path):
+        """A `points` dataset that isn't 2-D must raise the project's own
+        clear message, not PyVista's internal shape error."""
+        h5py = pytest.importorskip("h5py", reason="h5py not installed")
+        path = tmp_path / "flat_points.hdf5"
+        with h5py.File(path, "w") as f:
+            f.create_dataset("points", data=[0.0, 0.0, 0.0])
+        sim = self._make_sim(path)
+        with pytest.raises(ValueError, match="must have shape"):
+            sim.load_hdf5()
+
+    def test_wrong_column_count_points_raises_value_error(self, tmp_path):
+        """A `points` dataset with 2 columns instead of 3 must raise the
+        project's own clear message, not PyVista's internal shape error."""
+        h5py = pytest.importorskip("h5py", reason="h5py not installed")
+        path = tmp_path / "two_col_points.hdf5"
+        with h5py.File(path, "w") as f:
+            f.create_dataset("points", data=[[0.0, 0.0], [1.0, 1.0]])
+        sim = self._make_sim(path)
+        with pytest.raises(ValueError, match="must have shape"):
             sim.load_hdf5()
 
     def test_loads_points_dataset_as_point_cloud(self, tmp_path):
