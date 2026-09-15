@@ -2,12 +2,10 @@
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 class TestSaveCameraState:
     def test_writes_json_with_correct_keys(self, tmp_path):

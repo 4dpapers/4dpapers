@@ -3,30 +3,17 @@ from __future__ import annotations
 
 import json
 import re
-import sys
 import time
 from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "_extensions" / "4dpaper"))
-import importlib
-import importlib.util
-
-
-def _load_4dpaper():
-    spec = importlib.util.spec_from_file_location(
-        "fourDpaper",
-        Path(__file__).parent.parent / "_extensions" / "4dpaper" / "4dpaper.py",
-    )
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+from fourdpaper.lib import parser
 
 
 class TestParseShortcodes:
-    def test_finds_single_shortcode(self):
-        mod = _load_4dpaper()
+    def test_finds_single_shortcode(self, fourdpaper_hook):
+        mod = fourdpaper_hook
         text = '{{< 4d-image src="case.foam" field="Vm" id="fig-vm" >}}'
         result = mod.parse_shortcodes(text)
         assert len(result) == 1
@@ -34,8 +21,8 @@ class TestParseShortcodes:
         assert result[0]["src"] == "case.foam"
         assert result[0]["field"] == "Vm"
 
-    def test_finds_multiple_shortcodes(self):
-        mod = _load_4dpaper()
+    def test_finds_multiple_shortcodes(self, fourdpaper_hook):
+        mod = fourdpaper_hook
         text = (
             '{{< 4d-image src="a.foam" field="Vm" id="fig-a" >}}\n'
             'some prose\n'
@@ -45,37 +32,37 @@ class TestParseShortcodes:
         assert len(result) == 2
         assert result[1]["time"] == "last"
 
-    def test_returns_empty_for_no_shortcodes(self):
-        mod = _load_4dpaper()
+    def test_returns_empty_for_no_shortcodes(self, fourdpaper_hook):
+        mod = fourdpaper_hook
         result = mod.parse_shortcodes("# Just a heading\n\nSome prose.")
         assert result == []
 
-    def test_skips_shortcode_missing_required_keys(self):
-        mod = _load_4dpaper()
+    def test_skips_shortcode_missing_required_keys(self, fourdpaper_hook):
+        mod = fourdpaper_hook
         text = '{{< 4d-image src="case.foam" field="Vm" >}}'
         result = mod.parse_shortcodes(text)
         assert result == []
 
-    def test_defaults_time_to_mid(self):
-        mod = _load_4dpaper()
+    def test_defaults_time_to_mid(self, fourdpaper_hook):
+        mod = fourdpaper_hook
         text = '{{< 4d-image src="case.foam" field="Vm" id="fig-vm" >}}'
         result = mod.parse_shortcodes(text)
         assert result[0]["time"] == "mid"
 
-    def test_parses_fields_attribute(self):
-        mod = _load_4dpaper()
+    def test_parses_fields_attribute(self, fourdpaper_hook):
+        mod = fourdpaper_hook
         text = '{{< 4d-image src="case.foam" field="Vm" fields="Vm,activationTime" id="fig-vm" >}}'
         result = mod.parse_shortcodes(text)
         assert result[0]["fields"] == "Vm,activationTime"
 
-    def test_defaults_fields_to_empty(self):
-        mod = _load_4dpaper()
+    def test_defaults_fields_to_empty(self, fourdpaper_hook):
+        mod = fourdpaper_hook
         text = '{{< 4d-image src="case.foam" field="Vm" id="fig-vm" >}}'
         result = mod.parse_shortcodes(text)
         assert result[0]["fields"] == ""
 
-    def test_ignores_shortcode_in_fenced_code_block(self):
-        mod = _load_4dpaper()
+    def test_ignores_shortcode_in_fenced_code_block(self, fourdpaper_hook):
+        mod = fourdpaper_hook
         text = (
             "Here is an example:\n\n"
             "```\n"
@@ -88,8 +75,8 @@ class TestParseShortcodes:
         assert len(result) == 1
         assert result[0]["id"] == "fig-real"
 
-    def test_handles_single_quoted_attributes(self):
-        mod = _load_4dpaper()
+    def test_handles_single_quoted_attributes(self, fourdpaper_hook):
+        mod = fourdpaper_hook
         text = "{{< 4d-image src='case.foam' field='Vm' id='fig-vm' >}}"
         result = mod.parse_shortcodes(text)
         assert len(result) == 1
@@ -98,8 +85,8 @@ class TestParseShortcodes:
 
 
 class TestParsePanelShortcodes:
-    def test_finds_single_panel(self):
-        mod = _load_4dpaper()
+    def test_finds_single_panel(self, fourdpaper_hook):
+        mod = fourdpaper_hook
         text = (
             '{{< 4d-panel id="panel-1" layout="2x2" '
             'src1="a.foam" id1="fig-a" field1="Vm" '
@@ -114,22 +101,22 @@ class TestParsePanelShortcodes:
         assert p["subfigures"][0] == {"src": "a.foam", "id": "fig-a", "field": "Vm", "time": "mid", "fields": ""}
         assert p["subfigures"][1] == {"src": "b.stl",  "id": "fig-b", "field": "",   "time": "mid", "fields": ""}
 
-    def test_defaults_height_and_caption(self):
-        mod = _load_4dpaper()
+    def test_defaults_height_and_caption(self, fourdpaper_hook):
+        mod = fourdpaper_hook
         text = '{{< 4d-panel id="p" layout="1x1" src1="a.foam" id1="fig-a" field1="" >}}'
         result = mod.parse_panel_shortcodes(text)
         assert result[0]["height"] == "800px"
         assert result[0]["caption"] == ""
 
-    def test_reads_custom_height_and_caption(self):
-        mod = _load_4dpaper()
+    def test_reads_custom_height_and_caption(self, fourdpaper_hook):
+        mod = fourdpaper_hook
         text = '{{< 4d-panel id="p" layout="1x1" height="600px" caption="My panel" src1="a.foam" id1="fig-a" field1="" >}}'
         result = mod.parse_panel_shortcodes(text)
         assert result[0]["height"] == "600px"
         assert result[0]["caption"] == "My panel"
 
-    def test_reads_time_per_subfigure(self):
-        mod = _load_4dpaper()
+    def test_reads_time_per_subfigure(self, fourdpaper_hook):
+        mod = fourdpaper_hook
         text = (
             '{{< 4d-panel id="p" layout="1x2" '
             'src1="a.foam" id1="fig-a" field1="" time1="first" '
@@ -140,20 +127,20 @@ class TestParsePanelShortcodes:
         assert subs[0]["time"] == "first"
         assert subs[1]["time"] == "last"
 
-    def test_skips_panel_missing_id(self):
-        mod = _load_4dpaper()
+    def test_skips_panel_missing_id(self, fourdpaper_hook):
+        mod = fourdpaper_hook
         text = '{{< 4d-panel layout="1x1" src1="a.foam" id1="fig-a" field1="" >}}'
         result = mod.parse_panel_shortcodes(text)
         assert result == []
 
-    def test_skips_panel_with_no_subfigures(self):
-        mod = _load_4dpaper()
+    def test_skips_panel_with_no_subfigures(self, fourdpaper_hook):
+        mod = fourdpaper_hook
         text = '{{< 4d-panel id="p" layout="1x1" >}}'
         result = mod.parse_panel_shortcodes(text)
         assert result == []
 
-    def test_ignores_panel_in_fenced_code_block(self):
-        mod = _load_4dpaper()
+    def test_ignores_panel_in_fenced_code_block(self, fourdpaper_hook):
+        mod = fourdpaper_hook
         text = (
             "```\n"
             '{{< 4d-panel id="p" layout="1x1" src1="a.foam" id1="fig-a" field1="" >}}\n'
@@ -164,8 +151,8 @@ class TestParsePanelShortcodes:
         assert len(result) == 1
         assert result[0]["id"] == "real"
 
-    def test_finds_multiple_panels(self):
-        mod = _load_4dpaper()
+    def test_finds_multiple_panels(self, fourdpaper_hook):
+        mod = fourdpaper_hook
         text = (
             '{{< 4d-panel id="p1" layout="1x1" src1="a.foam" id1="fig-a" field1="" >}}\n'
             '{{< 4d-panel id="p2" layout="2x1" src1="b.stl" id1="fig-b" field1="" src2="c.stl" id2="fig-c" field2="" >}}'
@@ -194,9 +181,9 @@ class TestGeneratePanelHtml:
             "subfigures": subfigures,
         }
 
-    def test_creates_composite_html(self, tmp_path):
+    def test_creates_composite_html(self, tmp_path, fourdpaper_hook):
         from unittest.mock import patch
-        mod = _load_4dpaper()
+        mod = fourdpaper_hook
 
         def fake_gen_html(src, field, time_spec, output_path, fig_id=None, available_fields=None, **kwargs):
             output_path.write_text(f"<html>content-{fig_id}</html>")
@@ -207,9 +194,9 @@ class TestGeneratePanelHtml:
         out = tmp_path / "panel-test.html"
         assert out.exists()
 
-    def test_composite_contains_css_grid(self, tmp_path):
+    def test_composite_contains_css_grid(self, tmp_path, fourdpaper_hook):
         from unittest.mock import patch
-        mod = _load_4dpaper()
+        mod = fourdpaper_hook
 
         def fake_gen_html(src, field, time_spec, output_path, fig_id=None, available_fields=None, **kwargs):
             output_path.write_text("<html>x</html>")
@@ -222,9 +209,9 @@ class TestGeneratePanelHtml:
         assert "grid-template-columns:repeat(2,1fr)" in html
         assert "grid-template-rows:repeat(1,1fr)" in html
 
-    def test_composite_contains_re_relay_script(self, tmp_path):
+    def test_composite_contains_re_relay_script(self, tmp_path, fourdpaper_hook):
         from unittest.mock import patch
-        mod = _load_4dpaper()
+        mod = fourdpaper_hook
 
         def fake_gen_html(src, field, time_spec, output_path, fig_id=None, available_fields=None, **kwargs):
             output_path.write_text("<html>x</html>")
@@ -237,9 +224,9 @@ class TestGeneratePanelHtml:
         assert "4dpaper-camera-ack" in html        # downward ack relay
         assert "querySelectorAll" in html          # broadcast to child iframes
 
-    def test_composite_contains_subfigure_content(self, tmp_path):
+    def test_composite_contains_subfigure_content(self, tmp_path, fourdpaper_hook):
         from unittest.mock import patch
-        mod = _load_4dpaper()
+        mod = fourdpaper_hook
 
         def fake_gen_html(src, field, time_spec, output_path, fig_id=None, available_fields=None, **kwargs):
             output_path.write_text(f"<html>unique-{fig_id}</html>")
@@ -252,9 +239,9 @@ class TestGeneratePanelHtml:
         assert 'src="fig-b.html"' in html
         assert "data:text/html;base64" not in html
 
-    def test_composite_html_is_passed_to_signing_hook(self, tmp_path):
+    def test_composite_html_is_passed_to_signing_hook(self, tmp_path, fourdpaper_hook):
         from unittest.mock import patch
-        mod = _load_4dpaper()
+        mod = fourdpaper_hook
 
         def fake_gen_html(src, field, time_spec, output_path, fig_id=None, available_fields=None, **kwargs):
             output_path.write_text("<html>x</html>")
@@ -264,9 +251,9 @@ class TestGeneratePanelHtml:
 
         mock_sign.assert_called_once_with(tmp_path / "panel-test.html")
 
-    def test_invalid_layout_raises(self, tmp_path):
+    def test_invalid_layout_raises(self, tmp_path, fourdpaper_hook):
         from unittest.mock import patch
-        mod = _load_4dpaper()
+        mod = fourdpaper_hook
 
         def fake_gen_html(src, field, time_spec, output_path, fig_id=None, available_fields=None, **kwargs):
             output_path.write_text("<html>x</html>")
@@ -275,9 +262,9 @@ class TestGeneratePanelHtml:
             with pytest.raises(ValueError, match="layout"):
                 mod.generate_panel_html(self._make_panel("bad"), tmp_path)
 
-    def test_3x1_layout_has_three_columns(self, tmp_path):
+    def test_3x1_layout_has_three_columns(self, tmp_path, fourdpaper_hook):
         from unittest.mock import patch
-        mod = _load_4dpaper()
+        mod = fourdpaper_hook
         subs = [{"src": f"{i}.stl", "id": f"fig-{i}", "field": "", "time": "mid"} for i in range(3)]
 
         def fake_gen_html(src, field, time_spec, output_path, fig_id=None, available_fields=None, **kwargs):
@@ -313,51 +300,51 @@ class TestGeneratePanelPng:
             img.save(str(output_path))
         return _write
 
-    def test_creates_composite_png(self, tmp_path):
+    def test_creates_composite_png(self, tmp_path, fourdpaper_hook):
         from unittest.mock import patch
-        mod = _load_4dpaper()
+        mod = fourdpaper_hook
         with patch("fourdpaper.lib.render.generate_png_figure", side_effect=self._fake_png_gen("red")):
             mod.generate_panel_png(self._make_panel(), tmp_path)
         assert (tmp_path / "panel-test.png").exists()
 
-    def test_composite_2x1_is_correct_size(self, tmp_path):
+    def test_composite_2x1_is_correct_size(self, tmp_path, fourdpaper_hook):
         from unittest.mock import patch
         from PIL import Image
-        mod = _load_4dpaper()
+        mod = fourdpaper_hook
         # Subfigures are 1920×1080; 2x1 → 2 cols × 1 row = 3840×1080
         with patch("fourdpaper.lib.render.generate_png_figure", side_effect=self._fake_png_gen("blue")):
             mod.generate_panel_png(self._make_panel("2x1", 2), tmp_path)
         img = Image.open(tmp_path / "panel-test.png")
         assert img.size == (1920 * 2, 1080 * 1)
 
-    def test_2x2_layout_produces_correct_size(self, tmp_path):
+    def test_2x2_layout_produces_correct_size(self, tmp_path, fourdpaper_hook):
         from unittest.mock import patch
         from PIL import Image
-        mod = _load_4dpaper()
+        mod = fourdpaper_hook
         # Subfigures are 1920×1080; 2x2 → 2 cols × 2 rows = 3840×2160
         with patch("fourdpaper.lib.render.generate_png_figure", side_effect=self._fake_png_gen("green")):
             mod.generate_panel_png(self._make_panel("2x2", 4), tmp_path)
         img = Image.open(tmp_path / "panel-test.png")
         assert img.size == (1920 * 2, 1080 * 2)
 
-    def test_invalid_layout_raises(self, tmp_path):
+    def test_invalid_layout_raises(self, tmp_path, fourdpaper_hook):
         from unittest.mock import patch
-        mod = _load_4dpaper()
+        mod = fourdpaper_hook
         with patch("fourdpaper.lib.render.generate_png_figure", side_effect=self._fake_png_gen("red")):
             with pytest.raises(ValueError, match="layout"):
                 mod.generate_panel_png(self._make_panel("bad"), tmp_path)
 
 
 class TestIsCacheValid:
-    def test_returns_false_when_fig_missing(self, tmp_path):
-        mod = _load_4dpaper()
+    def test_returns_false_when_fig_missing(self, tmp_path, fourdpaper_hook):
+        mod = fourdpaper_hook
         src = tmp_path / "case.foam"
         src.write_text("")
         fig = tmp_path / "fig-vm.html"
         assert mod.is_cache_valid(fig, src) is False
 
-    def test_returns_true_when_fig_newer_than_src(self, tmp_path):
-        mod = _load_4dpaper()
+    def test_returns_true_when_fig_newer_than_src(self, tmp_path, fourdpaper_hook):
+        mod = fourdpaper_hook
         src = tmp_path / "case.foam"
         src.write_text("")
         time.sleep(0.05)
@@ -365,8 +352,8 @@ class TestIsCacheValid:
         fig.write_text("<html></html>")
         assert mod.is_cache_valid(fig, src) is True
 
-    def test_returns_false_when_src_newer_than_fig(self, tmp_path):
-        mod = _load_4dpaper()
+    def test_returns_false_when_src_newer_than_fig(self, tmp_path, fourdpaper_hook):
+        mod = fourdpaper_hook
         fig = tmp_path / "fig-vm.html"
         fig.write_text("<html></html>")
         time.sleep(0.05)
@@ -374,15 +361,15 @@ class TestIsCacheValid:
         src.write_text("")
         assert mod.is_cache_valid(fig, src) is False
 
-    def test_returns_true_when_src_missing(self, tmp_path):
-        mod = _load_4dpaper()
+    def test_returns_true_when_src_missing(self, tmp_path, fourdpaper_hook):
+        mod = fourdpaper_hook
         fig = tmp_path / "fig-vm.html"
         fig.write_text("<html></html>")
         src = tmp_path / "no_such_file.foam"
         assert mod.is_cache_valid(fig, src) is True
 
-    def test_stale_when_camera_newer_than_png(self, tmp_path):
-        mod = _load_4dpaper()
+    def test_stale_when_camera_newer_than_png(self, tmp_path, fourdpaper_hook):
+        mod = fourdpaper_hook
         import os, time as _time
         now = _time.time()
         src = tmp_path / "case.foam"
@@ -397,8 +384,8 @@ class TestIsCacheValid:
         os.utime(cam, (now, now))
         assert mod.is_cache_valid(fig, src, camera_path=cam) is False
 
-    def test_valid_when_png_newer_than_camera(self, tmp_path):
-        mod = _load_4dpaper()
+    def test_valid_when_png_newer_than_camera(self, tmp_path, fourdpaper_hook):
+        mod = fourdpaper_hook
         import os, time as _time
         now = _time.time()
         src = tmp_path / "case.foam"
@@ -413,8 +400,8 @@ class TestIsCacheValid:
         os.utime(fig, (now, now))
         assert mod.is_cache_valid(fig, src, camera_path=cam) is True
 
-    def test_valid_when_camera_file_absent(self, tmp_path):
-        mod = _load_4dpaper()
+    def test_valid_when_camera_file_absent(self, tmp_path, fourdpaper_hook):
+        mod = fourdpaper_hook
         import os, time as _time
         now = _time.time()
         src = tmp_path / "case.foam"
@@ -427,8 +414,8 @@ class TestIsCacheValid:
         cam = tmp_path / "nonexistent_camera.json"
         assert mod.is_cache_valid(fig, src, camera_path=cam) is True
 
-    def test_stale_when_extra_dep_newer_than_fig(self, tmp_path):
-        mod = _load_4dpaper()
+    def test_stale_when_extra_dep_newer_than_fig(self, tmp_path, fourdpaper_hook):
+        mod = fourdpaper_hook
         import os, time as _time
         now = _time.time()
         src = tmp_path / "case.foam"
@@ -444,9 +431,9 @@ class TestIsCacheValid:
 
 
 class TestMainCacheDependencies:
-    def test_main_uses_qmd_and_shortcuts_as_single_figure_deps(self):
+    def test_main_uses_qmd_and_shortcuts_as_single_figure_deps(self, fourdpaper_hook):
         import inspect
-        mod = _load_4dpaper()
+        mod = fourdpaper_hook
         source = inspect.getsource(mod.main)
         assert "figure_extra_deps" in source
         assert "qmd_extra_deps" in source
@@ -454,8 +441,8 @@ class TestMainCacheDependencies:
 
 
 class TestParseVideoShortcodes:
-    def test_finds_shortcode(self):
-        mod = _load_4dpaper()
+    def test_finds_shortcode(self, fourdpaper_hook):
+        mod = fourdpaper_hook
         text = '{{< 4d-video src="case.foam" field="Vm" fps="10" id="vid-vm" >}}'
         result = mod.parse_video_shortcodes(text)
         assert len(result) == 1
@@ -463,38 +450,38 @@ class TestParseVideoShortcodes:
         assert result[0]["src"] == "case.foam"
         assert result[0]["field"] == "Vm"
 
-    def test_parses_fps(self):
-        mod = _load_4dpaper()
+    def test_parses_fps(self, fourdpaper_hook):
+        mod = fourdpaper_hook
         text = '{{< 4d-video src="case.foam" field="Vm" fps="24" id="vid-vm" >}}'
         result = mod.parse_video_shortcodes(text)
         assert result[0]["fps"] == "24"
 
-    def test_defaults_fps_to_10(self):
-        mod = _load_4dpaper()
+    def test_defaults_fps_to_10(self, fourdpaper_hook):
+        mod = fourdpaper_hook
         text = '{{< 4d-video src="case.foam" field="Vm" id="vid-vm" >}}'
         result = mod.parse_video_shortcodes(text)
         assert result[0]["fps"] == "10"
 
-    def test_defaults_time_to_mid(self):
-        mod = _load_4dpaper()
+    def test_defaults_time_to_mid(self, fourdpaper_hook):
+        mod = fourdpaper_hook
         text = '{{< 4d-video src="case.foam" field="Vm" id="vid-vm" >}}'
         result = mod.parse_video_shortcodes(text)
         assert result[0]["time"] == "mid"
 
-    def test_skips_missing_id(self):
-        mod = _load_4dpaper()
+    def test_skips_missing_id(self, fourdpaper_hook):
+        mod = fourdpaper_hook
         text = '{{< 4d-video src="case.foam" field="Vm" >}}'
         result = mod.parse_video_shortcodes(text)
         assert result == []
 
-    def test_skips_missing_src(self):
-        mod = _load_4dpaper()
+    def test_skips_missing_src(self, fourdpaper_hook):
+        mod = fourdpaper_hook
         text = '{{< 4d-video field="Vm" id="vid-vm" >}}'
         result = mod.parse_video_shortcodes(text)
         assert result == []
 
-    def test_ignores_4d_image_shortcodes(self):
-        mod = _load_4dpaper()
+    def test_ignores_4d_image_shortcodes(self, fourdpaper_hook):
+        mod = fourdpaper_hook
         text = (
             '{{< 4d-image src="case.foam" field="Vm" id="fig-vm" >}}\n'
             '{{< 4d-video src="case.foam" field="Vm" id="vid-vm" >}}'
@@ -503,8 +490,8 @@ class TestParseVideoShortcodes:
         assert len(result) == 1
         assert result[0]["id"] == "vid-vm"
 
-    def test_ignores_shortcode_in_fenced_code_block(self):
-        mod = _load_4dpaper()
+    def test_ignores_shortcode_in_fenced_code_block(self, fourdpaper_hook):
+        mod = fourdpaper_hook
         text = (
             "```\n"
             '{{< 4d-video src="case.foam" field="Vm" id="vid-example" >}}\n'
@@ -515,8 +502,8 @@ class TestParseVideoShortcodes:
         assert len(result) == 1
         assert result[0]["id"] == "vid-real"
 
-    def test_accepts_single_quoted_attributes(self):
-        mod = _load_4dpaper()
+    def test_accepts_single_quoted_attributes(self, fourdpaper_hook):
+        mod = fourdpaper_hook
         text = "{{< 4d-video src='case.foam' field='Vm' id='vid-vm' >}}"
         result = mod.parse_video_shortcodes(text)
         assert len(result) == 1
@@ -524,8 +511,8 @@ class TestParseVideoShortcodes:
 
 
 class TestApplyCameraFromDict:
-    def test_falls_back_to_isometric_when_none(self):
-        mod = _load_4dpaper()
+    def test_falls_back_to_isometric_when_none(self, fourdpaper_hook):
+        mod = fourdpaper_hook
 
         class MockCam:
             position = None
@@ -545,8 +532,8 @@ class TestApplyCameraFromDict:
         mod._apply_camera_from_dict(pl, "fig-vm", None)
         assert pl._isometric_called
 
-    def test_applies_position_focal_view_up(self):
-        mod = _load_4dpaper()
+    def test_applies_position_focal_view_up(self, fourdpaper_hook):
+        mod = fourdpaper_hook
 
         class MockCam:
             position = None
@@ -574,8 +561,8 @@ class TestApplyCameraFromDict:
         assert pl.camera.focal_point == [0.0, 0.0, 0.0]
         assert pl.camera.up == [0.0, 1.0, 0.0]
 
-    def test_falls_back_on_missing_key(self):
-        mod = _load_4dpaper()
+    def test_falls_back_on_missing_key(self, fourdpaper_hook):
+        mod = fourdpaper_hook
 
         class MockCam:
             position = None
@@ -597,15 +584,15 @@ class TestApplyCameraFromDict:
 
 
 class TestVideoCacheLogic:
-    def test_mp4_stale_when_missing(self, tmp_path):
-        mod = _load_4dpaper()
+    def test_mp4_stale_when_missing(self, tmp_path, fourdpaper_hook):
+        mod = fourdpaper_hook
         src = tmp_path / "case.foam"
         src.write_text("")
         mp4 = tmp_path / "vid-vm-video.mp4"
         assert mod.is_cache_valid(mp4, src) is False
 
-    def test_mp4_valid_when_newer_than_src(self, tmp_path):
-        mod = _load_4dpaper()
+    def test_mp4_valid_when_newer_than_src(self, tmp_path, fourdpaper_hook):
+        mod = fourdpaper_hook
         import os
         import time as _time
         now = _time.time()
@@ -617,8 +604,8 @@ class TestVideoCacheLogic:
         os.utime(mp4, (now, now))
         assert mod.is_cache_valid(mp4, src) is True
 
-    def test_mp4_stale_when_camera_newer(self, tmp_path):
-        mod = _load_4dpaper()
+    def test_mp4_stale_when_camera_newer(self, tmp_path, fourdpaper_hook):
+        mod = fourdpaper_hook
         import os
         import time as _time
         now = _time.time()
@@ -633,8 +620,8 @@ class TestVideoCacheLogic:
         os.utime(cam, (now, now))
         assert mod.is_cache_valid(mp4, src, camera_path=cam) is False
 
-    def test_frame_stale_when_missing(self, tmp_path):
-        mod = _load_4dpaper()
+    def test_frame_stale_when_missing(self, tmp_path, fourdpaper_hook):
+        mod = fourdpaper_hook
         src = tmp_path / "case.foam"
         src.write_text("")
         frame = tmp_path / "vid-vm-frame.png"
@@ -642,8 +629,8 @@ class TestVideoCacheLogic:
 
 
 class TestGenerateVideoFigure:
-    def test_creates_mp4_frame_and_html(self, tmp_path):
-        mod = _load_4dpaper()
+    def test_creates_mp4_frame_and_html(self, tmp_path, fourdpaper_hook):
+        mod = fourdpaper_hook
         case_path = Path(
             "/data/tutorials/NiedererEtAl2012/Niederer.foam"
         )
@@ -677,8 +664,8 @@ class TestGenerateVideoFigure:
         assert "<video" in content, "HTML does not contain <video> element"
         assert preview_path.exists(), "Preview HTML not created"
 
-    def test_mp4_is_valid_h264(self, tmp_path):
-        mod = _load_4dpaper()
+    def test_mp4_is_valid_h264(self, tmp_path, fourdpaper_hook):
+        mod = fourdpaper_hook
         case_path = Path(
             "/data/tutorials/NiedererEtAl2012/Niederer.foam"
         )
@@ -715,9 +702,9 @@ class TestGenerateVideoFigure:
 
 
 class TestGenerateHtmlFigure:
-    def test_creates_html_file(self, tmp_path):
+    def test_creates_html_file(self, tmp_path, fourdpaper_hook):
         """Smoke test: verify generate_html_figure creates a non-empty .html file."""
-        mod = _load_4dpaper()
+        mod = fourdpaper_hook
         case_path = Path(
             "/data/tutorials/NiedererEtAl2012/Niederer.foam"
         )
@@ -740,8 +727,8 @@ class TestGenerateHtmlFigure:
 class TestVideoCameraViewModal:
     """Integration tests for camera sync in generated video HTML (foam case required)."""
 
-    def test_preview_html_has_camera_sync(self, tmp_path):
-        mod = _load_4dpaper()
+    def test_preview_html_has_camera_sync(self, tmp_path, fourdpaper_hook):
+        mod = fourdpaper_hook
         case_path = Path(
             "/data/tutorials/NiedererEtAl2012/Niederer.foam"
         )
@@ -769,11 +756,11 @@ class TestVideoCameraViewModal:
 class TestCameraSyncIntegration:
     """Integration tests: camera saved via the server flows into PNG generation."""
 
-    def test_saved_camera_used_for_png(self, tmp_path, monkeypatch):
+    def test_saved_camera_used_for_png(self, tmp_path, monkeypatch, fourdpaper_hook):
         """Camera JSON saved by the server is read back and applied during PNG generation."""
         import json
 
-        mod = _load_4dpaper()
+        mod = fourdpaper_hook
         case_path = Path(
             "/data/tutorials/NiedererEtAl2012/Niederer.foam"
         )
@@ -821,10 +808,10 @@ class TestPanelEndToEnd:
         ],
     }
 
-    def test_generate_panel_html_real_files(self, tmp_path):
+    def test_generate_panel_html_real_files(self, tmp_path, fourdpaper_hook):
         """generate_panel_html creates composite HTML and sub-figure HTMLs from real STL/PLY files."""
         pytest.importorskip("pyvista")
-        mod = _load_4dpaper()
+        mod = fourdpaper_hook
         stl_path = Path(__file__).parent / "data" / "base.stl"
         ply_path = Path(__file__).parent / "data" / "airplane.ply"
         if not stl_path.exists() or not ply_path.exists():
@@ -840,12 +827,12 @@ class TestPanelEndToEnd:
         assert "grid-template-columns:repeat(2,1fr)" in html, "CSS grid columns not found"
         assert "4dpaper-camera-ack" in html, "Bidirectional re-relay script not found"
 
-    def test_generate_panel_png_real_files(self, tmp_path):
+    def test_generate_panel_png_real_files(self, tmp_path, fourdpaper_hook):
         """generate_panel_png creates composite PNG whose size matches subfig dims × layout."""
         pytest.importorskip("pyvista")
         from PIL import Image
 
-        mod = _load_4dpaper()
+        mod = fourdpaper_hook
         stl_path = Path(__file__).parent / "data" / "base.stl"
         ply_path = Path(__file__).parent / "data" / "airplane.ply"
         if not stl_path.exists() or not ply_path.exists():
@@ -865,13 +852,13 @@ class TestPanelEndToEnd:
 class TestGeneratePngWindowSize:
     """Verify generate_png_figure uses 900x600 (matching HTML aspect ratio)."""
 
-    def test_png_figure_uses_900x600(self, tmp_path, monkeypatch):
-        import importlib.util
+    def test_png_figure_uses_900x600(self, tmp_path, monkeypatch, fourdpaper_hook):
         import sys
-        from pathlib import Path
         from unittest.mock import MagicMock
 
-        # Stub pyvista BEFORE loading the module
+        # generate_png_figure imports both pyvista and scripts.data_loader
+        # locally, at call time - so stubbing sys.modules here is enough to
+        # intercept them without reloading the module.
         fake_pv = MagicMock()
         fake_pl = MagicMock()
         fake_pl.screenshot.return_value = None
@@ -894,12 +881,7 @@ class TestGeneratePngWindowSize:
         )
         monkeypatch.setitem(sys.modules, "scripts.data_loader", fake_loader_mod)
 
-        spec = importlib.util.spec_from_file_location(
-            "fourDpaper_ws",
-            Path(__file__).parent.parent / "_extensions" / "4dpaper" / "4dpaper.py",
-        )
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
+        mod = fourdpaper_hook
         out_png = tmp_path / "fig.png"
 
         try:
@@ -920,21 +902,6 @@ class TestGeneratePngWindowSize:
         )
 
 
-def _load_parser():
-    """Load lib/parser.py by path.
-
-    Temporary: v1.1 PR 7 replaces every shim like this with a conftest fixture.
-    """
-    import importlib.util
-    import pathlib
-    spec = importlib.util.spec_from_file_location(
-        "fourd_parser", pathlib.Path("_extensions/4dpaper/lib/parser.py")
-    )
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-
 def test_parse_multi_image_shortcode_reads_grid_attrs():
     # NOTE: the task-2 brief's draft of this test used a `4d-subimages`
     # shortcode here. That does not match reality: `4d-subimages` is a
@@ -950,7 +917,7 @@ def test_parse_multi_image_shortcode_reads_grid_attrs():
         '{{< 4d-multi-image id="grid-a" layout="2x2" '
         'src1="a.vtu" id1="s1" src2="b.vtu" id2="s2" >}}'
     )
-    figs = _load_parser().parse_multi_image_shortcodes(text)
+    figs = parser.parse_multi_image_shortcodes(text)
 
     assert len(figs) == 1
     assert figs[0]["id"] == "grid-a"
@@ -978,14 +945,10 @@ def test_subimages_shortcode_registered_as_lua_only_grid():
     assert "local items = _numbered_items(kwargs)" in lua
 
     # And confirm it is NOT wired into the Python multi-image pre-render path.
-    import importlib.util
-    import pathlib
-    spec = importlib.util.spec_from_file_location(
-        "fourDpaper_subimages_check",
-        pathlib.Path("_extensions/4dpaper/4dpaper.py"),
+    fourdpaper_src = (
+        Path(__file__).parent.parent / "_extensions" / "4dpaper" / "4dpaper.py"
     )
-    fourdpaper_src = spec.origin
-    assert "subimages" not in Path(fourdpaper_src).read_text()
+    assert "subimages" not in fourdpaper_src.read_text()
 
 
 def _run_lua_grid(count, cols, layout):
@@ -1034,7 +997,7 @@ def test_parse_graph_panel_shortcode_reads_sources():
         '{{< 4d-graph-panel id="gp-a" layout="2x1" '
         'src1="p1.json" id1="g1" src2="p2.json" id2="g2" >}}'
     )
-    panels = _load_parser().parse_graph_panel_shortcodes(text)
+    panels = parser.parse_graph_panel_shortcodes(text)
 
     assert len(panels) == 1
     assert panels[0]["id"] == "gp-a"
@@ -1054,4 +1017,4 @@ def test_shortcode_inside_fenced_code_block_is_ignored():
         '{{< 4d-graph-panel id="doc-example" layout="2x2" src1="a.vtu" id1="s1" >}}\n'
         "```\n"
     )
-    assert _load_parser().parse_graph_panel_shortcodes(text) == []
+    assert parser.parse_graph_panel_shortcodes(text) == []

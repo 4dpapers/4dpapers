@@ -1,13 +1,7 @@
 """Tests for file-tree filtering logic in dashboard/file_plugin.py"""
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-from unittest.mock import patch
-
 import pytest
-
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from dashboard.file_plugin import _HIDDEN_DIRS, _HIDDEN_FILE_NAMES, _should_include
 

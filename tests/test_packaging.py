@@ -2,11 +2,46 @@
 from __future__ import annotations
 
 import os
+import pathlib
+import re
 import subprocess
 import sys
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
+
+# Match actual statements, not prose that happens to mention "sys.path" (e.g.
+# this module's own docstring above) or "spec_from_file_location" in a
+# comment. Scoped to tests/test_*.py, which excludes conftest.py by
+# construction - conftest.py holds the one legitimate importlib load.
+_SYS_PATH_EDIT_RE = re.compile(r"^\s*sys\.path\.(insert|append)", re.MULTILINE)
+_SPEC_FROM_FILE_LOCATION_RE = re.compile(r"spec_from_file_location\(")
+
+
+def test_no_importlib_shims_in_test_modules():
+    """Shims regenerate quietly - v0.1.3 added two while the cause was unfixed.
+
+    conftest.py is exempt: it holds the single unavoidable load of
+    4dpaper.py, which is a script and cannot be imported by name.
+    """
+    offenders = [
+        str(p) for p in pathlib.Path("tests").rglob("test_*.py")
+        if _SPEC_FROM_FILE_LOCATION_RE.search(p.read_text(encoding="utf-8"))
+    ]
+    assert not offenders, f"importlib shims remain in: {offenders}"
+
+
+def test_no_sys_path_manipulation_in_tests():
+    """A substring check on 'sys.path' would flag this file's own docstring.
+
+    Matching the actual statement form (and scoping to test_*.py) avoids
+    that false positive while still catching real sys.path surgery.
+    """
+    offenders = [
+        str(p) for p in pathlib.Path("tests").rglob("test_*.py")
+        if _SYS_PATH_EDIT_RE.search(p.read_text(encoding="utf-8"))
+    ]
+    assert not offenders, f"sys.path edits remain in: {offenders}"
 
 
 def _import_ok(statement: str, cwd: Path) -> subprocess.CompletedProcess:
