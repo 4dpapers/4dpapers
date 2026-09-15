@@ -46,7 +46,8 @@ class SimulationData:
       FEA:       .exo, .e, .ex2 (Exodus II)
       XDMF:      .xdmf, .xmf (companion .h5 must be co-located)
       meshio:    .med (Salome), .msh (Gmsh), .inp (Abaqus mesh)  — requires pip install meshio
-      HDF5:      .hdf5 (generic, top-level `points` dataset)  — requires pip install h5py
+      HDF5:      .hdf5 (generic, top-level `points` dataset + matching-shape
+                 datasets as point fields)  — requires pip install h5py
 
     Each format has a standalone public loader (e.g. sim.load_ensight()) that
     can be called directly without going through auto-detection.
@@ -372,6 +373,13 @@ class SimulationData:
         `.h5m`), and raises "Could not deduce file format" for anything
         else, including a plain `.hdf5` file. Here we read the top-level
         `points` dataset directly and build a point-cloud mesh from it.
+
+        Every other top-level dataset whose first dimension matches the
+        point count (e.g. a `(N,)` or `(N, 3)` array alongside an `(N, 3)`
+        `points` dataset) is attached as a point-data field, named after
+        the dataset. Datasets whose first dimension does not match the
+        point count are skipped silently -- there is no schema to tell us
+        what they represent, so we don't guess.
         """
         try:
             import h5py
@@ -386,7 +394,17 @@ class SimulationData:
                     "cannot interpret as a generic HDF5 mesh."
                 )
             points = np.asarray(f["points"])
-        self._set_single_mesh("hdf5", pv.PolyData(points))
+            fields = {}
+            for name, node in f.items():
+                if name == "points" or not isinstance(node, h5py.Dataset):
+                    continue
+                arr = np.asarray(node)
+                if arr.ndim >= 1 and arr.shape[0] == points.shape[0]:
+                    fields[name] = arr
+        mesh = pv.PolyData(points)
+        for name, arr in fields.items():
+            mesh.point_data[name] = arr
+        self._set_single_mesh("hdf5", mesh)
 
     def load_med(self):
         """Loads a Salome MED file through meshio."""

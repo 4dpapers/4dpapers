@@ -473,6 +473,25 @@ class TestHdf5Loader:
         assert mesh.n_points == 3
         assert sim._format == "hdf5"
 
+    def test_attaches_matching_datasets_as_point_data_fields(self, tmp_path):
+        """Top-level datasets whose first dimension matches the point count
+        are attached as point-data fields, named after the dataset. A
+        dataset whose first dimension does not match is silently skipped."""
+        h5py = pytest.importorskip("h5py", reason="h5py not installed")
+        pts = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0]]
+        path = tmp_path / "fielded.hdf5"
+        with h5py.File(path, "w") as f:
+            f.create_dataset("points", data=pts)
+            f.create_dataset("temperature", data=[300.0, 310.0, 320.0])
+            f.create_dataset("unrelated", data=[[0.0] * 5] * 100)
+        sim = self._make_sim(path)
+        sim.load_hdf5()
+        mesh = sim.get_mesh(0)
+        assert mesh.n_points == 3
+        assert "temperature" in mesh.point_data
+        assert list(mesh.point_data["temperature"]) == [300.0, 310.0, 320.0]
+        assert "unrelated" not in mesh.point_data
+
 
 # ── Integration tests with real files ─────────────────────────────────────
 DATA_DIR = Path(__file__).parent / "data"
@@ -582,12 +601,23 @@ class TestRealFiles:
             pytest.skip(f"MED fixture not loadable in this environment: {exc}")
 
     def test_hdf5(self):
+        """The fixture carries points plus per-point 'temperature' and
+        'pressure' fields; both must surface as scalar fields, not just
+        the point cloud."""
         try:
-            self._assert_mesh_ok(self._load("test_data.hdf5"))
+            sim = self._load("test_data.hdf5")
+            self._assert_mesh_ok(sim)
         except ImportError as exc:
             pytest.skip(str(exc))
         except Exception as exc:
             pytest.skip(f"HDF5 fixture not loadable in this environment: {exc}")
+            return
+        mesh = sim.get_mesh(0)
+        assert mesh.n_points == 8
+        assert "temperature" in mesh.point_data
+        assert "pressure" in mesh.point_data
+        assert "temperature" in sim.fields
+        assert "pressure" in sim.fields
 
 
 class TestDecomposedRelativePathStaging:
