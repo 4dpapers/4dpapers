@@ -19,6 +19,7 @@ except ImportError:
 _here = Path(__file__).resolve()
 
 try:
+    import fourdpaper.lib
     from fourdpaper.lib.config import _project_root, _app_root, ShortcutResolver, _shortcut_resolver, _shortcuts_yml_path
 except ModuleNotFoundError as _exc:
     if _exc.name == "fourdpaper" or (_exc.name or "").startswith("fourdpaper."):
@@ -31,6 +32,20 @@ except ModuleNotFoundError as _exc:
             "    pip install -e .\n"
         )
     raise
+
+# Guard against a stale/foreign editable install: the imported 'fourdpaper'
+# package must be the same source tree as this hook file, or figures would
+# silently be built from the wrong copy of the code.
+_expected_lib = (_here.parent / "lib").resolve()
+_imported_lib = Path(fourdpaper.lib.__file__).resolve().parent
+if _imported_lib != _expected_lib:
+    print(
+        f"ERROR: the fourdpaper package resolves to {_imported_lib}, but this "
+        f"hook lives in {_here.parent}. Figures would be built from a different "
+        f"copy of the code. Reinstall from this project: pip install -e .",
+        file=sys.stderr,
+    )
+    sys.exit(1)
 
 from fourdpaper.lib.utils import resolve_src_path, is_cache_valid, _maybe_sign_output_html
 from dashboard.document_signing import sign_html_file_if_configured
