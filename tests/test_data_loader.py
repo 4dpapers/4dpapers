@@ -383,7 +383,12 @@ class TestReaderLoaders:
 
 
 class TestMeshioLoaders:
-    """HDF5, MED, MSH: use meshio (lazy import) via _read_via_meshio helper."""
+    """MED, MSH, Abaqus .inp: use meshio (lazy import) via _read_via_meshio helper.
+
+    `.hdf5` is deliberately excluded here -- it reads directly via h5py
+    (see TestHdf5Loader below), not through meshio. meshio has no reader
+    that recognizes a plain `.hdf5` extension.
+    """
 
     def _make_sim(self, suffix):
         sim = SimulationData.__new__(SimulationData)
@@ -398,7 +403,6 @@ class TestMeshioLoaders:
         return sim
 
     @pytest.mark.parametrize("suffix,method,fmt", [
-        (".hdf5", "load_hdf5",      "hdf5"),
         (".med",  "load_med",       "med"),
         (".msh",  "load_msh",       "msh"),
         (".inp",  "load_abaqus_inp","abaqus_inp"),
@@ -416,10 +420,58 @@ class TestMeshioLoaders:
 
     def test_missing_meshio_raises_import_error(self):
         """If meshio is not installed, a clear ImportError with install hint is raised."""
-        sim = self._make_sim(".hdf5")
+        sim = self._make_sim(".med")
         with patch.dict("sys.modules", {"meshio": None}):
             with pytest.raises(ImportError, match="pip install meshio"):
+                sim.load_med()
+
+
+class TestHdf5Loader:
+    """`.hdf5` reads directly via h5py -- see load_hdf5's docstring for why
+    it cannot go through meshio (meshio has no generic HDF5 reader; it
+    only recognizes specific registered layouts like MOAB's `.h5m`).
+    """
+
+    def _make_sim(self, case_path):
+        sim = SimulationData.__new__(SimulationData)
+        sim.case_path = case_path
+        sim._meshes = {}
+        sim._time_steps = []
+        sim._reader = None
+        sim._format = None
+        sim._is_decomposed = False
+        sim._proc_readers = []
+        sim._proc_foam_files = []
+        return sim
+
+    def test_missing_h5py_raises_import_error(self):
+        """If h5py is not installed, a clear ImportError with install hint is raised."""
+        sim = self._make_sim(Path("dummy.hdf5"))
+        with patch.dict("sys.modules", {"h5py": None}):
+            with pytest.raises(ImportError, match="pip install h5py"):
                 sim.load_hdf5()
+
+    def test_missing_points_dataset_raises_value_error(self, tmp_path):
+        h5py = pytest.importorskip("h5py", reason="h5py not installed")
+        path = tmp_path / "no_points.hdf5"
+        with h5py.File(path, "w") as f:
+            f.create_dataset("other", data=[1, 2, 3])
+        sim = self._make_sim(path)
+        with pytest.raises(ValueError, match="points"):
+            sim.load_hdf5()
+
+    def test_loads_points_dataset_as_point_cloud(self, tmp_path):
+        h5py = pytest.importorskip("h5py", reason="h5py not installed")
+        pts = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0]]
+        path = tmp_path / "cloud.hdf5"
+        with h5py.File(path, "w") as f:
+            f.create_dataset("points", data=pts)
+        sim = self._make_sim(path)
+        sim.load_hdf5()
+        assert sim.time_steps == [0]
+        mesh = sim.get_mesh(0)
+        assert mesh.n_points == 3
+        assert sim._format == "hdf5"
 
 
 # ── Integration tests with real files ─────────────────────────────────────

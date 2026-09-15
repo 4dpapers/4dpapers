@@ -45,7 +45,8 @@ class SimulationData:
       CFD:       .case (EnSight Gold), .cgns
       FEA:       .exo, .e, .ex2 (Exodus II)
       XDMF:      .xdmf, .xmf (companion .h5 must be co-located)
-      meshio:    .hdf5, .med (Salome), .msh (Gmsh), .inp (Abaqus mesh)  — requires pip install meshio
+      meshio:    .med (Salome), .msh (Gmsh), .inp (Abaqus mesh)  — requires pip install meshio
+      HDF5:      .hdf5 (generic, top-level `points` dataset)  — requires pip install h5py
 
     Each format has a standalone public loader (e.g. sim.load_ensight()) that
     can be called directly without going through auto-detection.
@@ -67,7 +68,9 @@ class SimulationData:
         ".exo": "exodus", ".e": "exodus", ".ex2": "exodus",
         # XDMF + HDF5 pair
         ".xdmf": "xdmf", ".xmf": "xdmf",
-        # meshio-backed (.h5 excluded — PyVista maps it to FLUENTCFFReader)
+        # .h5 excluded — PyVista maps it to FLUENTCFFReader.
+        # .hdf5 reads directly via h5py (meshio has no generic HDF5 reader);
+        # .med / .msh are meshio-backed.
         ".hdf5": "hdf5", ".med": "med", ".msh": "msh",
         # Abaqus input deck (mesh only — .odb output databases are proprietary)
         ".inp": "abaqus_inp",
@@ -360,8 +363,30 @@ class SimulationData:
         return pv.from_meshio(meshio.read(str(self.case_path)))
 
     def load_hdf5(self):
-        """Loads a generic `.hdf5` mesh through meshio."""
-        self._set_single_mesh("hdf5", self._read_via_meshio())
+        """Loads a generic `.hdf5` file directly via h5py.
+
+        A `.hdf5` file has no fixed mesh schema (unlike `.med`/`.msh`,
+        which meshio parses through registered format readers), so it
+        cannot be routed through meshio -- meshio only recognizes HDF5
+        containers that match a specific registered layout (e.g. MOAB's
+        `.h5m`), and raises "Could not deduce file format" for anything
+        else, including a plain `.hdf5` file. Here we read the top-level
+        `points` dataset directly and build a point-cloud mesh from it.
+        """
+        try:
+            import h5py
+        except ImportError:
+            raise ImportError(
+                "h5py is required for generic .hdf5 files. Install with: pip install h5py"
+            )
+        with h5py.File(str(self.case_path), "r") as f:
+            if "points" not in f:
+                raise ValueError(
+                    f"'{self.case_path}' has no top-level 'points' dataset; "
+                    "cannot interpret as a generic HDF5 mesh."
+                )
+            points = np.asarray(f["points"])
+        self._set_single_mesh("hdf5", pv.PolyData(points))
 
     def load_med(self):
         """Loads a Salome MED file through meshio."""

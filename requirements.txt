@@ -14,7 +14,11 @@ plotly>=5.0.0
 kaleido==0.2.1
 cryptography>=41.0.0
 numpy
-# Official images include meshio so the Gmsh, MED, experimental Abaqus mesh,
-# and generic HDF5 readers work without modifying a running container.
+# Official images include meshio so the Gmsh, MED, and experimental Abaqus
+# mesh readers work without modifying a running container.
 meshio==5.3.5
+# h5py: the generic-HDF5 reader path in scripts/data_loader.py. Without it
+# tests/test_data_loader.py skipped, which hid the reader rather than
+# testing it.
+h5py>=3.10
 watchdog>=4.0.0
