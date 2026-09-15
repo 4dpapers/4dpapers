@@ -4,7 +4,6 @@ from __future__ import annotations
 import gzip
 import json
 import shutil
-import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -13,8 +12,7 @@ import pytest
 
 pyvista = pytest.importorskip("pyvista", reason="pyvista not installed")
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
-from data_loader import SimulationData
+from scripts.data_loader import SimulationData
 
 
 class TestCacheKeyBugFix:
@@ -34,7 +32,7 @@ class TestCacheKeyBugFix:
         sim._is_decomposed = False
         sim._proc_readers = []
         sim._proc_foam_files = []
-        with patch("data_loader.pv.read", return_value=fake_mesh):
+        with patch("scripts.data_loader.pv.read", return_value=fake_mesh):
             sim.load_vtk_single()
         assert (0, "default") in sim._meshes
         assert 0 not in sim._meshes
@@ -53,7 +51,7 @@ class TestCacheKeyBugFix:
         sim._is_decomposed = False
         sim._proc_readers = []
         sim._proc_foam_files = []
-        with patch("data_loader.pv.read", return_value=fake_mesh):
+        with patch("scripts.data_loader.pv.read", return_value=fake_mesh):
             sim.load_vtk_directory()
         assert (0, "default") in sim._meshes
         assert (1, "default") in sim._meshes
@@ -206,7 +204,7 @@ class TestSingleMeshLoaders:
     def test_loads_single_mesh(self, suffix, method):
         fake_mesh = MagicMock()
         sim = self._make_sim(suffix)
-        with patch("data_loader.pv.read", return_value=fake_mesh):
+        with patch("scripts.data_loader.pv.read", return_value=fake_mesh):
             getattr(sim, method)()
         assert sim.time_steps == [0]
         assert sim.get_mesh(0) is fake_mesh
@@ -219,7 +217,7 @@ class TestSingleMeshLoaders:
     ])
     def test_sets_format(self, suffix, method):
         sim = self._make_sim(suffix)
-        with patch("data_loader.pv.read", return_value=MagicMock()):
+        with patch("scripts.data_loader.pv.read", return_value=MagicMock()):
             getattr(sim, method)()
         assert sim._format == suffix.lstrip(".")
 
@@ -255,7 +253,7 @@ class TestPLYCustomReaderAndCompression:
             "0 0 0\n1 0 0\n0 1 0\n3 0 1 2\n"
         )
         sim = self._make_sim(source)
-        with patch("data_loader._CustomPLYReader.read", return_value=fake_mesh) as custom_read:
+        with patch("scripts.data_loader._CustomPLYReader.read", return_value=fake_mesh) as custom_read:
             sim.load_ply()
         custom_read.assert_called_once()
         assert sim._meshes[(0, "default")] is fake_mesh
@@ -266,8 +264,8 @@ class TestPLYCustomReaderAndCompression:
         source = tmp_path / "shape.ply"
         source.write_text("ply\nformat ascii 1.0\nend_header\n")
         sim = self._make_sim(source)
-        with patch("data_loader._CustomPLYReader.read", side_effect=ValueError("bad ply")):
-            with patch("data_loader.pv.read", return_value=fake_mesh) as pv_read:
+        with patch("scripts.data_loader._CustomPLYReader.read", side_effect=ValueError("bad ply")):
+            with patch("scripts.data_loader.pv.read", return_value=fake_mesh) as pv_read:
                 sim.load_ply()
         pv_read.assert_called_once()
         assert sim.get_mesh(0) is fake_mesh
@@ -360,7 +358,7 @@ class TestReaderLoaders:
     def test_sets_reader_and_time_steps(self, fmt, method, pv_class):
         fake_reader = self._make_fake_reader()
         sim = self._make_sim(fmt)
-        with patch(f"data_loader.pv.{pv_class}", return_value=fake_reader):
+        with patch(f"scripts.data_loader.pv.{pv_class}", return_value=fake_reader):
             getattr(sim, method)()
         assert sim._reader is fake_reader
         assert sim._time_steps == [0.0, 1.0]
@@ -369,7 +367,7 @@ class TestReaderLoaders:
     def test_cgns_enables_all_bases_and_families(self):
         fake_reader = self._make_fake_reader()
         sim = self._make_sim("cgns")
-        with patch("data_loader.pv.CGNSReader", return_value=fake_reader):
+        with patch("scripts.data_loader.pv.CGNSReader", return_value=fake_reader):
             sim.load_cgns()
         fake_reader.enable_all_bases.assert_called_once()
         fake_reader.enable_all_families.assert_called_once()
@@ -378,7 +376,7 @@ class TestReaderLoaders:
         """If reader has no time values, fall back to [0]."""
         fake_reader = self._make_fake_reader(time_values=[])
         sim = self._make_sim("ensight")
-        with patch("data_loader.pv.EnSightReader", return_value=fake_reader):
+        with patch("scripts.data_loader.pv.EnSightReader", return_value=fake_reader):
             sim.load_ensight()
         assert sim._time_steps == [0]
 
@@ -413,7 +411,7 @@ class TestMeshioLoaders:
         fake_meshio_mesh = MagicMock()
         sim = self._make_sim(suffix)
         with patch.dict("sys.modules", {"meshio": MagicMock(read=MagicMock(return_value=fake_meshio_mesh))}):
-            with patch("data_loader.pv.from_meshio", return_value=fake_pv_mesh):
+            with patch("scripts.data_loader.pv.from_meshio", return_value=fake_pv_mesh):
                 getattr(sim, method)()
         assert sim.time_steps == [0]
         assert sim.get_mesh(0) is fake_pv_mesh

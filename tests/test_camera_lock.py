@@ -68,51 +68,40 @@ def test_lock_get_invalid_fig_id_returns_400():
     handler.set_status.assert_called_once_with(400)
 
 
-def _load_4dpaper():
-    import importlib.util
-    spec = importlib.util.spec_from_file_location(
-        "fourDpaper",
-        Path(__file__).parent.parent / "_extensions" / "4dpaper" / "4dpaper.py",
-    )
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-
-def test_lock_widget_in_snippet():
-    mod = _load_4dpaper()
+def test_lock_widget_in_snippet(fourdpaper_hook):
+    mod = fourdpaper_hook
     snippet = mod._controls_strip_snippet("fig-vm")
     assert 'id="cs-lock-widget-fig_vm"' in snippet
     assert "&#x1F513;" in snippet
 
 
-def test_snippet_has_set_locked_function():
-    mod = _load_4dpaper()
+def test_snippet_has_set_locked_function(fourdpaper_hook):
+    mod = fourdpaper_hook
     snippet = mod._controls_strip_snippet("fig-vm")
     assert "function _setLocked" in snippet
     assert 'cs-lock-widget-fig_vm' in snippet
 
 
-def test_snippet_has_lock_guard_in_send_camera():
-    mod = _load_4dpaper()
+def test_snippet_has_lock_guard_in_send_camera(fourdpaper_hook):
+    mod = fourdpaper_hook
     snippet = mod._controls_strip_snippet("fig-vm")
     assert "if(_locked)return" in snippet or "if (_locked) return" in snippet
 
 
-def test_snippet_queries_lock_on_load():
-    mod = _load_4dpaper()
+def test_snippet_queries_lock_on_load(fourdpaper_hook):
+    mod = fourdpaper_hook
     snippet = mod._controls_strip_snippet("fig-vm")
     assert "4dpaper-lock-query" in snippet
 
 
-def test_snippet_handles_lock_state_message():
-    mod = _load_4dpaper()
+def test_snippet_handles_lock_state_message(fourdpaper_hook):
+    mod = fourdpaper_hook
     snippet = mod._controls_strip_snippet("fig-vm")
     assert "4dpaper-lock-state" in snippet
 
 
-def test_snippet_handles_lock_ack_message():
-    mod = _load_4dpaper()
+def test_snippet_handles_lock_ack_message(fourdpaper_hook):
+    mod = fourdpaper_hook
     snippet = mod._controls_strip_snippet("fig-vm")
     assert "4dpaper-lock-ack" in snippet
 

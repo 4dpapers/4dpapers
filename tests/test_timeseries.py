@@ -1,37 +1,17 @@
 """Tests for 4d-timeseries shortcode parsing and step expansion."""
 from __future__ import annotations
 
-import importlib.util
-import importlib
 from pathlib import Path
-import sys
+
 import numpy as np
 import pytest
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "_extensions" / "4dpaper"))
-
-
-def _load_4dpaper():
-    spec = importlib.util.spec_from_file_location(
-        "fourDpaper",
-        Path(__file__).parent.parent / "_extensions" / "4dpaper" / "4dpaper.py",
-    )
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-
-def _load_frontend():
-    return importlib.import_module("lib.frontend")
-
-
-def _load_render():
-    return importlib.import_module("lib.render")
+from fourdpaper.lib import frontend, render
 
 
 class TestParseTimeseriesShortcodes:
-    def test_basic_parse(self):
-        mod = _load_4dpaper()
+    def test_basic_parse(self, fourdpaper_hook):
+        mod = fourdpaper_hook
         text = '{{< 4d-timeseries src="case.foam" field="Vm" id="ts-vm" steps="4" caption="My cap" >}}'
         result = mod.parse_timeseries_shortcodes(text)
         assert len(result) == 1
@@ -44,26 +24,26 @@ class TestParseTimeseriesShortcodes:
         assert r["camera_mode"] == "sync"
         assert r["timeseries"] is True
 
-    def test_times_param_parsed(self):
-        mod = _load_4dpaper()
+    def test_times_param_parsed(self, fourdpaper_hook):
+        mod = fourdpaper_hook
         text = '{{< 4d-timeseries src="c.foam" field="Vm" id="ts1" times="first,5,last" >}}'
         result = mod.parse_timeseries_shortcodes(text)
         assert result[0]["times"] == "first,5,last"
 
-    def test_missing_id_skipped(self):
-        mod = _load_4dpaper()
+    def test_missing_id_skipped(self, fourdpaper_hook):
+        mod = fourdpaper_hook
         text = '{{< 4d-timeseries src="c.foam" field="Vm" >}}'
         result = mod.parse_timeseries_shortcodes(text)
         assert result == []
 
-    def test_default_steps_is_four(self):
-        mod = _load_4dpaper()
+    def test_default_steps_is_four(self, fourdpaper_hook):
+        mod = fourdpaper_hook
         text = '{{< 4d-timeseries src="c.foam" field="Vm" id="ts1" >}}'
         result = mod.parse_timeseries_shortcodes(text)
         assert result[0]["steps"] == "4"
 
-    def test_subfigures_initially_empty(self):
-        mod = _load_4dpaper()
+    def test_subfigures_initially_empty(self, fourdpaper_hook):
+        mod = fourdpaper_hook
         text = '{{< 4d-timeseries src="c.foam" field="Vm" id="ts1" >}}'
         result = mod.parse_timeseries_shortcodes(text)
         assert result[0]["subfigures"] == []
@@ -71,81 +51,81 @@ class TestParseTimeseriesShortcodes:
 
 
 class TestExpandTimeseriesSteps:
-    def test_steps_4_divides_evenly(self):
-        mod = _load_4dpaper()
+    def test_steps_4_divides_evenly(self, fourdpaper_hook):
+        mod = fourdpaper_hook
         ts = {"id": "ts1", "steps": "4", "times": ""}
         result = mod._expand_timeseries_steps(ts, 100)
         assert len(result) == 4
         assert result[0] == 0
         assert result[-1] == 99
 
-    def test_times_first_and_last(self):
-        mod = _load_4dpaper()
+    def test_times_first_and_last(self, fourdpaper_hook):
+        mod = fourdpaper_hook
         ts = {"id": "ts1", "steps": "4", "times": "first,last"}
         result = mod._expand_timeseries_steps(ts, 50)
         assert result == [0, 49]
 
-    def test_times_explicit_indices(self):
-        mod = _load_4dpaper()
+    def test_times_explicit_indices(self, fourdpaper_hook):
+        mod = fourdpaper_hook
         ts = {"id": "ts1", "steps": "4", "times": "0,5,10"}
         result = mod._expand_timeseries_steps(ts, 20)
         assert result == [0, 5, 10]
 
-    def test_times_clamps_to_max(self):
-        mod = _load_4dpaper()
+    def test_times_clamps_to_max(self, fourdpaper_hook):
+        mod = fourdpaper_hook
         ts = {"id": "ts1", "steps": "4", "times": "0,999"}
         result = mod._expand_timeseries_steps(ts, 10)
         assert result[1] == 9  # clamped to n_steps - 1
 
-    def test_times_invalid_falls_back_to_steps(self):
-        mod = _load_4dpaper()
+    def test_times_invalid_falls_back_to_steps(self, fourdpaper_hook):
+        mod = fourdpaper_hook
         ts = {"id": "ts1", "steps": "3", "times": "abc,xyz"}
         result = mod._expand_timeseries_steps(ts, 10)
         assert len(result) == 3  # falls back to steps=3
 
-    def test_steps_1_treated_as_2(self):
-        mod = _load_4dpaper()
+    def test_steps_1_treated_as_2(self, fourdpaper_hook):
+        mod = fourdpaper_hook
         ts = {"id": "ts1", "steps": "1", "times": ""}
         result = mod._expand_timeseries_steps(ts, 10)
         assert len(result) == 2  # max(2, 1) = 2
 
-    def test_n_steps_1_returns_single_frame(self):
-        mod = _load_4dpaper()
+    def test_n_steps_1_returns_single_frame(self, fourdpaper_hook):
+        mod = fourdpaper_hook
         ts = {"id": "ts1", "steps": "4", "times": ""}
         result = mod._expand_timeseries_steps(ts, 1)
         assert result == [0]
 
-    def test_n_steps_0_returns_single_frame(self):
-        mod = _load_4dpaper()
+    def test_n_steps_0_returns_single_frame(self, fourdpaper_hook):
+        mod = fourdpaper_hook
         ts = {"id": "ts1", "steps": "4", "times": ""}
         result = mod._expand_timeseries_steps(ts, 0)
         assert result == [0]
 
 
 class TestMainTimeseriesIntegration:
-    def test_main_source_has_parse_timeseries(self):
+    def test_main_source_has_parse_timeseries(self, fourdpaper_hook):
         import inspect
-        mod = _load_4dpaper()
+        mod = fourdpaper_hook
         source = inspect.getsource(mod.main)
         assert "parse_timeseries_shortcodes" in source
         assert "ts_raw" in source
 
-    def test_main_guard_includes_ts_raw(self):
+    def test_main_guard_includes_ts_raw(self, fourdpaper_hook):
         import inspect
-        mod = _load_4dpaper()
+        mod = fourdpaper_hook
         source = inspect.getsource(mod.main)
         # The early-exit guard must check ts_raw too
         assert "ts_raw" in source
 
-    def test_main_merges_timeseries_into_panels(self):
+    def test_main_merges_timeseries_into_panels(self, fourdpaper_hook):
         import inspect
-        mod = _load_4dpaper()
+        mod = fourdpaper_hook
         source = inspect.getsource(mod.main)
         assert "panels.append(ts_panel)" in source
 
-    def test_main_timeseries_panel_forces_camera_sync(self):
+    def test_main_timeseries_panel_forces_camera_sync(self, fourdpaper_hook):
         import inspect
-        mod = _load_4dpaper()
+        mod = fourdpaper_hook
         source = inspect.getsource(mod.main)
         # A 4d-timeseries is a *mandatory* camera-synced panel: every frame must
         # share one camera file (camera_<panel_id>.json) so rotating one frame
@@ -156,7 +136,6 @@ class TestMainTimeseriesIntegration:
         assert '"camera_mode": "sync"' in ts_block
 
     def test_render_timeseries_uses_lock_only_parent_toolbar(self):
-        render = _load_render()
         import inspect
         source = inspect.getsource(render.generate_panel_html)
         assert "show_transport=not panel.get(\"timeseries\", False)" in source
@@ -230,18 +209,15 @@ class TestFourdTimeseriesLua:
 
 class TestTimeseriesMeshSync:
     def test_timeseries_children_keep_hidden_lock_infrastructure(self):
-        frontend = _load_frontend()
         import inspect
         source = inspect.getsource(frontend._controls_strip_snippet)
         assert 'html_block_lock = (' in source
         assert 'if show_lock_btn:' not in source.split('html_block_lock = (', 1)[0].rsplit('\n', 6)[-1]
 
     def test_lock_state_is_reapplied_after_renderer_ready(self):
-        frontend = _load_frontend()
         assert 'if(_locked)_setLocked(true);' in frontend._GOLDEN_TOPBAR_JS
 
     def test_camera_sync_watches_camera_state_not_only_mouseup(self):
-        frontend = _load_frontend()
         assert 'function _watchCam()' in frontend._GOLDEN_TOPBAR_JS
         assert '_camWatchSig=_camSig(r);_watchCam();' in frontend._GOLDEN_TOPBAR_JS
         assert '_markCamApplied(cam);' in frontend._GOLDEN_TOPBAR_JS
@@ -251,7 +227,6 @@ class TestTimeseriesMeshSync:
         # have no cs-svg-axes element. Without a null guard, _svg.addEventListener
         # throws and aborts the whole IIFE — killing camera send/receive setup and
         # breaking sync. The wiring must be guarded so setup completes regardless.
-        frontend = _load_frontend()
         assert (
             '_svg=document.getElementById("cs-svg-axes-__FIGSAFE__");if(_svg){'
             in frontend._GOLDEN_TOPBAR_JS
@@ -264,7 +239,6 @@ class TestTimeseriesMeshSync:
     def test_camera_apply_receiver_registers_for_orientationless_frame(self):
         # Generate a strip with show_orientation=False and confirm the golden
         # camera-apply message handler is still present (setup reaches the end).
-        frontend = _load_frontend()
         strip = frontend._controls_strip_snippet(
             "recv-frame", show_lock_btn=False, show_orientation=False,
             fields_to_embed=["Vm", "p"], active_field="Vm",
@@ -278,7 +252,6 @@ class TestTimeseriesMeshSync:
 
     def test_reference_sampling_remaps_geometry_from_original_point_ids(self):
         pv = pytest.importorskip("pyvista")
-        render = _load_render()
 
         faces = np.array([3, 0, 1, 2])
         reference = pv.PolyData(

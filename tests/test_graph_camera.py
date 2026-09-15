@@ -1,35 +1,16 @@
 """Tests for Plotly graph camera save/apply wiring."""
 from __future__ import annotations
 
-import importlib.util
 import json
 from pathlib import Path
 
 import pytest
 
-
-def _load_4dpaper():
-    spec = importlib.util.spec_from_file_location(
-        "fourDpaper",
-        Path(__file__).parent.parent / "_extensions" / "4dpaper" / "4dpaper.py",
-    )
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+from fourdpaper.lib import parser
 
 
-def _load_parser():
-    spec = importlib.util.spec_from_file_location(
-        "fourDpaper_parser",
-        Path(__file__).parent.parent / "_extensions" / "4dpaper" / "lib" / "parser.py",
-    )
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-
-def test_plotly_camera_sync_snippet_posts_and_applies_camera():
-    mod = _load_4dpaper()
+def test_plotly_camera_sync_snippet_posts_and_applies_camera(fourdpaper_hook):
+    mod = fourdpaper_hook
     html = mod._plotly_camera_sync_snippet("fig-plot")
     assert "plotly_relayout" in html
     assert "4dpaper-camera" in html
@@ -37,8 +18,8 @@ def test_plotly_camera_sync_snippet_posts_and_applies_camera():
     assert "Plotly.relayout" in html
 
 
-def test_plotly_camera_from_saved_state_maps_projection():
-    mod = _load_4dpaper()
+def test_plotly_camera_from_saved_state_maps_projection(fourdpaper_hook):
+    mod = fourdpaper_hook
     result = mod._plotly_camera_from_saved_state(
         {
             "position": [1, 2, 3],
@@ -55,9 +36,9 @@ def test_plotly_camera_from_saved_state_maps_projection():
     }
 
 
-def test_apply_saved_plotly_camera_updates_scene_layout(tmp_path, monkeypatch):
+def test_apply_saved_plotly_camera_updates_scene_layout(tmp_path, monkeypatch, fourdpaper_hook):
     go = pytest.importorskip("plotly.graph_objects")
-    mod = _load_4dpaper()
+    mod = fourdpaper_hook
 
     state_dir = tmp_path / "state"
     state_dir.mkdir()
@@ -104,7 +85,6 @@ def test_plotly_json_fixture_is_parseable_and_accepted_by_shortcode_parser():
     assert isinstance(data.get("data"), list)
     assert isinstance(data.get("layout"), dict)
 
-    parser = _load_parser()
     qmd = (
         '{{< 4d-graph id="pressure-curve" '
         'src="tests/data/example_graph.json" '

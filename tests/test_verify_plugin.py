@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -34,9 +33,6 @@ def test_verify_handler_in_routes():
 
 
 def test_verify_handler_returns_result_for_json_body(tmp_path):
-    import sys
-
-    sys.path.insert(0, str(Path(__file__).parent.parent))
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric import ed25519
     from dashboard.document_signing import sign_html

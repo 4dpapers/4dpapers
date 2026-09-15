@@ -21,6 +21,8 @@ import sys
 import traceback
 from pathlib import Path
 
+from fourdpaper.lib.render import _get_simulation, generate_html_figure, generate_png_figure
+
 # App root resolved relative to this file: correct both in the repo layout and
 # in Docker, where scripts/ and _extensions/ are baked into /app while
 # PROJECT_ROOT=/workspace.
@@ -71,18 +73,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    # lib.* lives under _extensions/4dpaper; lib.utils imports
-    # dashboard.document_signing and lib.render imports scripts.data_loader,
-    # both resolved from the app root. A fresh subprocess has neither on
-    # sys.path.
-    for path in (_APP_ROOT / "_extensions" / "4dpaper", _APP_ROOT):
-        if str(path) not in sys.path:
-            sys.path.insert(0, str(path))
     project_root = _resolve_project_root()
-    if str(project_root) not in sys.path:
-        sys.path.insert(0, str(project_root))
-
-    from lib.render import _get_simulation, generate_html_figure, generate_png_figure
 
     # Absolute path required: SimulationData's decomposed-case staging
     # symlinks the raw path string, so a relative --case produces dangling

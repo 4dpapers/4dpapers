@@ -4,13 +4,13 @@ from __future__ import annotations
 import importlib
 import pathlib
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
 
+from fourdpaper import cache_bust_assets
+
 _REPO = Path(__file__).resolve().parents[1]
-_EXT_DIR = Path(__file__).resolve().parents[1] / "_extensions" / "4dpaper"
 
 
 @pytest.fixture
@@ -18,9 +18,6 @@ def cache_bust(monkeypatch, tmp_path):
     monkeypatch.setenv("PROJECT_ROOT", str(tmp_path))
     monkeypatch.delenv("QUARTO_PROJECT_DIR", raising=False)
     monkeypatch.delenv("FOURD_PAPER_VIEW", raising=False)
-    monkeypatch.syspath_prepend(str(_EXT_DIR))
-    import cache_bust_assets
-
     return importlib.reload(cache_bust_assets)
 
 

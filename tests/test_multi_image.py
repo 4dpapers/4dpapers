@@ -1,13 +1,7 @@
 """Tests for 4d-multi-image rendering helpers."""
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-
-sys.path.insert(0, str(Path(__file__).parent.parent / "_extensions" / "4dpaper"))
-
-from lib import render
+from fourdpaper.lib import render
 
 
 class TestMultiImageScalarBarArgs:

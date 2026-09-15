@@ -5,21 +5,17 @@ The exported standalone HTML must inline each figure as an iframe `srcdoc`
 """
 
 import importlib
-import sys
 from pathlib import Path
 
 import pytest
 
-_EXT_DIR = Path(__file__).resolve().parents[1] / "_extensions" / "4dpaper"
+from fourdpaper import inject_figures
 
 
 @pytest.fixture
 def inject(monkeypatch, tmp_path):
     monkeypatch.setenv("PROJECT_ROOT", str(tmp_path))
     monkeypatch.delenv("FOURD_APP_MODE", raising=False)
-    monkeypatch.syspath_prepend(str(_EXT_DIR))
-    import inject_figures
-
     return importlib.reload(inject_figures)
 
 
